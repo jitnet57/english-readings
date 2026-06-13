@@ -1,0 +1,43 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Stale compiled JS (이번 프로젝트의 유령 버그 주범 — 절대 커밋 금지)
+# .ts/.tsx의 컴파일 결과물이 src/루트에 생기면 새 코드를 가림
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+vite.config.js
+vite.config.d.ts
+# 단, 정상 설정 파일(.ts 짝 없음)은 추적 유지
+!postcss.config.js
+!tailwind.config.js
+
+# Vite cache
+node_modules/.vite/

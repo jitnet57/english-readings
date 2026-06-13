@@ -1,0 +1,132 @@
+import { Book } from '@/types/book';
+
+export const dorianBook: Book = {
+  id: 'dorian-001',
+  title: 'The Picture of Dorian Gray',
+  author: 'Oscar Wilde',
+  level: 'advanced',
+  coverUrl: 'https://images.unsplash.com/photo-1507842217343-583f20270319?w=200&h=300&fit=crop',
+  description: 'A philosophical novel about beauty, corruption, and morality.',
+  sentences: [
+    {
+      id: 'dorian-1',
+      pageNumber: 1,
+      enText: 'The studio was filled with the rich odor of roses, and beneath it, another fragrance, subtle and delicate, the odor of musk and amber.',
+      koText: '스튜디오는 장미의 풍부한 향기로 가득 찼고, 그 아래에, 또 다른 향기가 있었다, 섬세하고 우아한, 사향과 호박의 냄새.',
+    },
+    {
+      id: 'dorian-2',
+      pageNumber: 1,
+      enText: 'From the corner of the divan on which he was lying, smoking, as usual, innumerable cigarettes, Lord Henry Wotton could just catch the gleam of the honey-colored blossoms.',
+      koText: '그가 누워있는 디반 모서리에서, 평소처럼 무수한 담배를 피우고 있는 헨리 워튼 경은 노란색 꽃이 피는 것의 반짝임을 겨우 볼 수 있었다.',
+    },
+    {
+      id: 'dorian-3',
+      pageNumber: 2,
+      enText: 'The painter is a charming fellow, but he really is not much in the way of being an artist, said Lord Henry languidly.',
+      koText: '화가는 매력적인 사람이지만, 그는 정말로 예술가라는 점에서 별로 아닙니다, 헨리 경은 나른하게 말했다.',
+    },
+    {
+      id: 'dorian-4',
+      pageNumber: 2,
+      enText: 'Hallward laughed. How can you say that, Harry?',
+      koText: 'Hallward가 웃었다. 해리, 어떻게 그렇게 말할 수 있어요?',
+    },
+    {
+      id: 'dorian-5',
+      pageNumber: 2,
+      enText: 'What is art but a mirror held up to nature?',
+      koText: '미술이 자연에 비춘 거울이 아니라면 무엇입니까?',
+    },
+    {
+      id: 'dorian-6',
+      pageNumber: 3,
+      enText: 'I believe that if one man were to live out his life fully and completely, he might find all that the mystics seek.',
+      koText: '나는 한 남자가 그의 인생을 완전하고 온전하게 살아낸다면, 그는 신비주의자들이 찾는 모든 것을 찾을 수 있을 것이라고 �는다.',
+    },
+    {
+      id: 'dorian-7',
+      pageNumber: 3,
+      enText: 'Were to give form to every feeling, expression to every thought, reality to every dream.',
+      koText: '모든 감정에 형태를 주고, 모든 생각에 표현을 주고, 모든 꿈에 현실을 준다면.',
+    },
+    {
+      id: 'dorian-8',
+      pageNumber: 4,
+      enText: 'Dorian Gray listened, but made no answer. He was preoccupied with his own thoughts.',
+      koText: '도리안 그레이는 귀를 기울였지만 대답을 하지 않았다. 그는 자신의 생각에 몰두했다.',
+    },
+    {
+      id: 'dorian-9',
+      pageNumber: 4,
+      enText: 'The advantage of the emotions is that they lead us astray, said Lord Henry.',
+      koText: '감정의 장점은 그것들이 우리를 길을 잃게 한다는 것입니다, 헨리 경이 말했다.',
+    },
+    {
+      id: 'dorian-10',
+      pageNumber: 5,
+      enText: 'The painted image on the canvas seemed to smile at him in mockery.',
+      koText: '캔버스 위의 칠해진 이미지는 그에게 조롱으로 미소 지어 보였다.',
+    },
+    {
+      id: 'dorian-11',
+      pageNumber: 5,
+      enText: 'If it were only the other way! he cried, in despair.',
+      koText: '만약 다른 방식이었다면! 그는 절망으로 외쳤다.',
+    },
+    {
+      id: 'dorian-12',
+      pageNumber: 5,
+      enText: 'If it were I who were to be always young, and the picture that were to grow old!',
+      koText: '만약 내가 항상 젊었고, 그림이 늙어가는 것이었다면!',
+    },
+    {
+      id: 'dorian-13',
+      pageNumber: 6,
+      enText: 'For a moment he was overcome by a terrible fear.',
+      koText: '순간 그는 끔찍한 두려움에 휩싸였다.',
+    },
+    {
+      id: 'dorian-14',
+      pageNumber: 6,
+      enText: 'What had he done? What had those passionate words to his painter really meant?',
+      koText: '그는 무엇을 했는가? 그의 화가에게 한 그 열정적인 말들이 정말로 무엇을 의미했는가?',
+    },
+    {
+      id: 'dorian-15',
+      pageNumber: 7,
+      enText: 'He turned back to the picture and gazed at it in wonder.',
+      koText: '그는 그림으로 돌아섰고 경이로움 속에서 그것을 바라봤다.',
+    },
+    {
+      id: 'dorian-16',
+      pageNumber: 7,
+      enText: 'It was true! He could not deny it. His own beauty had been his curse.',
+      koText: '그것이 사실이었다! 그는 그것을 부정할 수 없었다. 그의 자신의 아름다움은 그의 저주였다.',
+    },
+    {
+      id: 'dorian-17',
+      pageNumber: 8,
+      enText: 'How sad it is that one can never get back his youth!',
+      koText: '자신의 청춘을 다시 얻을 수 없다는 것이 얼마나 슬픈가!',
+    },
+    {
+      id: 'dorian-18',
+      pageNumber: 8,
+      enText: 'The only consolation in the world is that those who do not conform to our ideas of beauty are inevitably the happiest.',
+      koText: '세상의 유일한 위로는 우리의 아름다움 관념을 따르지 않는 사람들이 필연적으로 가장 행복하다는 것이다.',
+    },
+    {
+      id: 'dorian-19',
+      pageNumber: 9,
+      enText: 'Nothing can cure the soul but the senses, just as nothing can cure the senses but the soul.',
+      koText: '감각이 영혼을 치유할 수 없듯이, 영혼만이 감각을 치유할 수 있다.',
+    },
+    {
+      id: 'dorian-20',
+      pageNumber: 9,
+      enText: 'He was already beginning to lose his youth, and with it his beauty.',
+      koText: '그는 이미 자신의 청춘을 잃기 시작했고, 그것과 함께 자신의 아름다움도.',
+    },
+  ],
+};

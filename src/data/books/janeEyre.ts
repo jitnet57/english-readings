@@ -1,0 +1,132 @@
+import { Book } from '@/types/book';
+
+export const janeEyreBook: Book = {
+  id: 'jane-eyre-001',
+  title: 'Jane Eyre',
+  author: 'Charlotte Brontë',
+  level: 'intermediate',
+  coverUrl: 'https://images.unsplash.com/photo-1507842217343-583f20270319?w=200&h=300&fit=crop',
+  description: 'A novel about Jane, an orphan girl who becomes a teacher and governess.',
+  sentences: [
+    {
+      id: 'jane-1',
+      pageNumber: 1,
+      enText: 'There was no possibility of taking a walk that day.',
+      koText: '그날 산책을 할 가능성은 없었다.',
+    },
+    {
+      id: 'jane-2',
+      pageNumber: 1,
+      enText: 'We had been wandering in the leafless shrubbery an hour in the morning.',
+      koText: '우리는 아침에 한 시간 동안 잎이 없는 덤불 숲에서 헤맸다.',
+    },
+    {
+      id: 'jane-3',
+      pageNumber: 2,
+      enText: 'But since dinner, Mrs. Reed had taken the armchair by the fireside.',
+      koText: '하지만 저녁 식사 이후, 리드 부인은 벽난로 옆의 팔걸이 의자를 차지했다.',
+    },
+    {
+      id: 'jane-4',
+      pageNumber: 2,
+      enText: 'I was left quite alone with the winter wind outside.',
+      koText: '나는 외부의 겨울 바람과 함께 완전히 혼자 남겨졌다.',
+    },
+    {
+      id: 'jane-5',
+      pageNumber: 2,
+      enText: 'I was glad of it: I never liked long walks.',
+      koText: '나는 그것을 기뻐했다: 나는 긴 산책을 좋아하지 않았다.',
+    },
+    {
+      id: 'jane-6',
+      pageNumber: 3,
+      enText: 'Mrs. Reed was sewing; she pursed up her lips when she heard me approach.',
+      koText: '리드 부인은 바느질을 하고 있었다; 그녀는 나에게 다가오는 것을 들었을 때 입술을 오므렸다.',
+    },
+    {
+      id: 'jane-7',
+      pageNumber: 3,
+      enText: 'Miss Jane, you must come to Mrs. Reed in the breakfast-room, said Bessie.',
+      koText: '미스 제인, 당신은 아침 식사실의 리드 부인에게 가야 합니다, 베씨가 말했다.',
+    },
+    {
+      id: 'jane-8',
+      pageNumber: 4,
+      enText: 'Her face looked composed, but her eyes were troubled.',
+      koText: '그녀의 얼굴은 침착해 보였지만, 그녀의 눈은 걱정되어 보였다.',
+    },
+    {
+      id: 'jane-9',
+      pageNumber: 4,
+      enText: 'I wish all the world away, and then we should be alone and should love each other.',
+      koText: '나는 모든 세상이 사라지기를 바라고, 그러면 우리는 혼자가 될 것이고 서로 사랑해야 한다.',
+    },
+    {
+      id: 'jane-10',
+      pageNumber: 5,
+      enText: 'Do you feel how the icicle is melting in my hand?',
+      koText: '나의 손에서 고드름이 녹고 있는 것을 느끼세요?',
+    },
+    {
+      id: 'jane-11',
+      pageNumber: 5,
+      enText: 'I put my cold hand into hers: she pressed it as if wishing to warm it.',
+      koText: '나는 차가운 손을 그녀의 손에 넣었다: 그녀는 그것을 따뜻하게 하고 싶어하는 것처럼 눌렀다.',
+    },
+    {
+      id: 'jane-12',
+      pageNumber: 6,
+      enText: 'What a strange wish it is that I have always entertained to become a governess.',
+      koText: '내가 항상 가정교사가 되고 싶어 한 것이 얼마나 이상한 소원인가.',
+    },
+    {
+      id: 'jane-13',
+      pageNumber: 6,
+      enText: 'I am not fit for it.',
+      koText: '나는 그것에 적합하지 않다.',
+    },
+    {
+      id: 'jane-14',
+      pageNumber: 6,
+      enText: 'I have not the vivacity of manner, nor the gaiety of dress.',
+      koText: '나는 생생한 태도도 없고, 옷의 쾌활함도 없다.',
+    },
+    {
+      id: 'jane-15',
+      pageNumber: 7,
+      enText: 'I have not the quick facility of movement which marks the governess.',
+      koText: '나는 가정교사를 표시하는 빠른 동작 능력이 없다.',
+    },
+    {
+      id: 'jane-16',
+      pageNumber: 7,
+      enText: 'I had never set eyes upon Thornfield, the place where I was to live.',
+      koText: '나는 내가 살아야 할 Thornfield라는 장소를 한 번도 본 적이 없었다.',
+    },
+    {
+      id: 'jane-17',
+      pageNumber: 8,
+      enText: 'But I knew well enough that it would be a place of trials.',
+      koText: '하지만 그것이 시련의 장소가 될 것이라는 것을 충분히 알고 있었다.',
+    },
+    {
+      id: 'jane-18',
+      pageNumber: 8,
+      enText: 'My past life was like the life of a prisoner.',
+      koText: '내 과거 삶은 죄수의 삶과 같았다.',
+    },
+    {
+      id: 'jane-19',
+      pageNumber: 9,
+      enText: 'Now I was at last free, and could hope for a brighter future.',
+      koText: '이제 나는 마침내 자유로워졌고, 더 밝은 미래를 기대할 수 있었다.',
+    },
+    {
+      id: 'jane-20',
+      pageNumber: 9,
+      enText: 'I had no relations and no home to go to.',
+      koText: '나는 관계가 없었고 갈 집도 없었다.',
+    },
+  ],
+};
