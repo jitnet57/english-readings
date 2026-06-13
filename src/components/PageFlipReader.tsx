@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ChevronUp, ChevronDown, Globe } from 'lucide-react';
 import { TTSButton } from './TTSButton';
 import { BookDiscussion } from './BookDiscussion';
@@ -29,6 +29,18 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [translatedPages, setTranslatedPages] = useState<Map<number, string>>(new Map());
   const [translationProgress, setTranslationProgress] = useState<TranslationProgress | null>(null);
+  const currentWordRef = useRef<HTMLSpanElement | null>(null);
+  const textContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // 자동 스크롤: 읽는 단어(빨간 펜슬 위치)로 화면을 부드럽게 이동
+  useEffect(() => {
+    if (currentWordIndex >= 0 && currentWordRef.current) {
+      currentWordRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      });
+    }
+  }, [currentWordIndex]);
 
   // 자동 페이지 넘기기 (TTS 완료 후)
   useEffect(() => {
@@ -272,9 +284,9 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
               </div>
 
             {/* Page Text with Highlighting */}
-            <div className="flex-1 relative">
-              {/* 원문 (항상 표시) — 읽은 부분 연속 형광색 + 중요 단어 강조 */}
-              <p className="text-base md:text-lg leading-8 text-gray-800 text-justify whitespace-pre-wrap">
+            <div ref={textContainerRef} className="flex-1 relative max-h-[55vh] overflow-y-auto pr-2">
+              {/* 원문 (항상 표시) — 읽은 부분 연속 형광색 + 중요 단어 강조 + 빨간 펜슬 */}
+              <p className="text-base md:text-lg leading-loose text-gray-800 text-justify whitespace-pre-wrap">
                 {(() => {
                   // 읽은 위치까지 연속 형광색을 만들기 위해 최대 읽은 토큰 인덱스 계산
                   const maxReadIdx = highlightedWords.size > 0
@@ -300,11 +312,14 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
                     const underline = isImportant
                       ? 'underline decoration-wavy decoration-yellow-500 decoration-2'
                       : '';
+                    // 현재 읽는 단어는 빨간 펜슬 밑줄
+                    const pencilUnderline = isCurrent ? 'border-b-2 border-red-500' : '';
 
                     return (
                       <span
                         key={idx}
-                        className={`transition-colors duration-200 ${bg} ${underline} ${isImportant ? 'cursor-help font-medium' : ''} ${isCurrent ? 'font-bold' : ''}`}
+                        ref={isCurrent ? currentWordRef : undefined}
+                        className={`relative transition-colors duration-200 ${bg} ${underline} ${pencilUnderline} ${isImportant ? 'cursor-help font-medium' : ''} ${isCurrent ? 'font-bold' : ''}`}
                         title={isImportant ? `📖 ${vocabInfo?.meaning}` : ''}
                         onMouseEnter={(e) => {
                           if (vocabInfo) {
@@ -314,6 +329,12 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
                         }}
                         onMouseLeave={() => setHoveredWord(null)}
                       >
+                        {/* 🖍️ 빨간 펜슬 — 현재 읽는 단어 위에서 같이 이동 */}
+                        {isCurrent && (
+                          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-sm pointer-events-none animate-bounce">
+                            ✏️
+                          </span>
+                        )}
                         {word}
                       </span>
                     );
