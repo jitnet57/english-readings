@@ -21,7 +21,6 @@ export function TTSButton({ text, onWordHighlight, onHighlightedWords, onProgres
     return saved ? parseInt(saved) : 0;
   });
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-  const wordTimingsRef = useRef<number[]>([]);
 
   useEffect(() => {
     const updateVoices = () => {
@@ -102,84 +101,115 @@ export function TTSButton({ text, onWordHighlight, onHighlightedWords, onProgres
     utterance.rate = rate;
     utterance.pitch = pitch;
 
+    // 토큰별 문자 시작 위치 맵 (charIndex → 토큰 인덱스 매핑용)
+    const tokens = text.split(/(\s+)/);
+    const tokenStart: number[] = [];
+    let charPos = 0;
+    tokens.forEach((tok) => {
+      tokenStart.push(charPos);
+      charPos += tok.length;
+    });
+    const totalWordTokens = tokens.filter((t) => t.trim()).length;
+
+    const highlightedSet = new Set<number>();
+    let boundaryFired = false;
+    let readWordCount = 0;
+
+    // charIndex가 속한 토큰 인덱스 찾기 (비공백 토큰)
+    const tokenIndexForChar = (charIndex: number): number => {
+      for (let i = 0; i < tokens.length; i++) {
+        const start = tokenStart[i];
+        const end = start + tokens[i].length;
+        if (charIndex >= start && charIndex < end && tokens[i].trim()) {
+          return i;
+        }
+      }
+      return -1;
+    };
+
+    // ✅ 정확한 동기화: 실제 발화 중 단어 경계마다 발생 (charIndex 제공)
+    utterance.onboundary = (e: SpeechSynthesisEvent) => {
+      if (e.name && e.name !== 'word') return;
+      boundaryFired = true;
+      const idx = tokenIndexForChar(e.charIndex);
+      if (idx === -1) return;
+
+      const apply = () => {
+        highlightedSet.add(idx);
+        onWordHighlight?.(idx);
+        onHighlightedWords?.(new Set(highlightedSet));
+        readWordCount++;
+        if (onProgress && totalWordTokens > 0) {
+          onProgress(Math.min(99, Math.round((readWordCount / totalWordTokens) * 100)));
+        }
+      };
+
+      // 싱크 오프셋: 양수면 늦게, 음수면 즉시 (미세 보정용)
+      if (syncOffset > 0) {
+        const t = setTimeout(apply, syncOffset);
+        highlightTimeoutRef.current.push(t);
+      } else {
+        apply();
+      }
+    };
+
     utterance.onstart = () => {
       setIsPlaying(true);
-      // 단어별 하이라이팅 설정 (싱크 오프셋 적용)
-      setupWordHighlighting(text, rate, syncOffset);
+      // 폴백: 600ms 내 boundary 이벤트가 없으면 추정 방식 사용 (일부 브라우저/음성 미지원)
+      const fallbackTimer = setTimeout(() => {
+        if (!boundaryFired) {
+          setupEstimatedHighlighting(tokens, totalWordTokens, rate, syncOffset);
+        }
+      }, 600);
+      highlightTimeoutRef.current.push(fallbackTimer);
     };
 
     utterance.onend = () => {
       setIsPlaying(false);
-      highlightTimeoutRef.current.forEach(timeout => clearTimeout(timeout));
+      highlightTimeoutRef.current.forEach((t) => clearTimeout(t));
       highlightTimeoutRef.current = [];
-      if (onHighlightedWords) {
-        onHighlightedWords(new Set());
-      }
+      onProgress?.(100);
+      onHighlightedWords?.(new Set());
     };
 
     utterance.onerror = () => {
       setIsPlaying(false);
-      highlightTimeoutRef.current.forEach(timeout => clearTimeout(timeout));
+      highlightTimeoutRef.current.forEach((t) => clearTimeout(t));
       highlightTimeoutRef.current = [];
     };
 
     window.speechSynthesis.speak(utterance);
   };
 
-  const setupWordHighlighting = (text: string, playbackRate: number, offset: number = 0) => {
-    const words = text.split(/(\s+)/);
+  // 폴백: boundary 미지원 시 단어 길이 기반 추정 타이밍
+  const setupEstimatedHighlighting = (
+    tokens: string[],
+    totalWordTokens: number,
+    playbackRate: number,
+    offset: number
+  ) => {
     const highlightedSet = new Set<number>();
-
-    // 더 정확한 단어별 읽기 시간 계산
-    // 기본값: 450ms per word at 1x speed
-    const baseWordDuration = 450;
-    const avgWordDuration = (baseWordDuration / playbackRate);
-
+    const baseWordDuration = 450 / playbackRate;
     let accumulatedTime = 0;
-    const wordTimings: number[] = [];
+    let readWordCount = 0;
 
-    words.forEach((word) => {
-      if (word.trim().length > 0) {
-        const wordLength = word.trim().length;
-        // 단어 길이에 따른 시간 조정
-        const estimatedDuration = avgWordDuration * (
-          wordLength > 8 ? 1.3 :
-          wordLength > 5 ? 1.15 :
-          wordLength > 3 ? 1.05 :
-          1.0
-        );
-        wordTimings.push(accumulatedTime);
-        accumulatedTime += estimatedDuration;
-      }
-    });
+    tokens.forEach((tok, idx) => {
+      if (!tok.trim()) return;
+      const len = tok.trim().length;
+      const dur = baseWordDuration * (len > 8 ? 1.3 : len > 5 ? 1.15 : len > 3 ? 1.05 : 1.0);
+      const timing = Math.max(0, accumulatedTime + offset);
+      accumulatedTime += dur;
 
-    // 타이밍 저장 (나중에 조정할 수 있도록)
-    wordTimingsRef.current = wordTimings;
-
-    let wordIndex = 0;
-    words.forEach((word, idx) => {
-      if (word.trim()) {
-        // 싱크 오프셋 적용
-        const timing = Math.max(0, (wordTimings[wordIndex] || 0) + offset);
-        wordIndex++;
-
-        const timeout = setTimeout(() => {
-          highlightedSet.add(idx);
-          if (onWordHighlight) {
-            onWordHighlight(idx);
-          }
-          if (onHighlightedWords) {
-            onHighlightedWords(new Set(highlightedSet));
-          }
-          // 진행도 계산
-          if (onProgress) {
-            const progress = Math.round(((wordIndex - 1) / words.filter(w => w.trim()).length) * 100);
-            onProgress(Math.min(progress, 99));
-          }
-        }, timing);
-
-        highlightTimeoutRef.current.push(timeout);
-      }
+      const t = setTimeout(() => {
+        highlightedSet.add(idx);
+        onWordHighlight?.(idx);
+        onHighlightedWords?.(new Set(highlightedSet));
+        readWordCount++;
+        if (onProgress && totalWordTokens > 0) {
+          onProgress(Math.min(99, Math.round((readWordCount / totalWordTokens) * 100)));
+        }
+      }, timing);
+      highlightTimeoutRef.current.push(t);
     });
   };
 

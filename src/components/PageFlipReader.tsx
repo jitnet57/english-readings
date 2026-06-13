@@ -231,16 +231,20 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
                   >
                     {isTranslating ? '번역 중...' : `${SUPPORTED_LANGUAGES[targetLanguage]}로 번역`}
                   </button>
-                  {translatedPages.size > 0 && (
+                  {translatedContent && (
                     <button
-                      onClick={() => {
-                        setTranslatedPages(new Map());
-                        setTranslatedContent(null);
-                        pageTranslationService.stop();
-                      }}
+                      onClick={() => setTranslatedContent(null)}
                       className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
                     >
-                      원문 보기
+                      번역 숨기기
+                    </button>
+                  )}
+                  {!translatedContent && translatedPages.has(currentPage) && (
+                    <button
+                      onClick={() => setTranslatedContent(translatedPages.get(currentPage) || null)}
+                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition"
+                    >
+                      번역 보기
                     </button>
                   )}
                 </div>
@@ -269,53 +273,70 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
 
             {/* Page Text with Highlighting */}
             <div className="flex-1 relative">
-              {translatedContent ? (
-                // 번역된 콘텐츠
-                <p className="text-base md:text-lg leading-8 text-gray-800 text-justify whitespace-pre-wrap">
-                  {translatedContent}
-                </p>
-              ) : (
-                // 원문 + 강조
+              {/* 원문 (항상 표시) — 읽은 부분 연속 형광색 + 중요 단어 강조 */}
               <p className="text-base md:text-lg leading-8 text-gray-800 text-justify whitespace-pre-wrap">
-                {pages[currentPage].split(/(\s+)/).map((word, idx) => {
-                  const cleanWord = word.replace(/[^\w']/g, '').toLowerCase();
-                  const vocabInfo = getVocabularyInfo(cleanWord);
-                  const isImportant = !!vocabInfo;
+                {(() => {
+                  // 읽은 위치까지 연속 형광색을 만들기 위해 최대 읽은 토큰 인덱스 계산
+                  const maxReadIdx = highlightedWords.size > 0
+                    ? Math.max(...Array.from(highlightedWords), currentWordIndex)
+                    : currentWordIndex;
 
-                  return (
-                    <span
-                      key={idx}
-                      className={`transition-colors duration-300 relative inline-block cursor-help ${
-                        highlightedWords.has(idx)
-                          ? 'bg-yellow-200 font-bold px-1 rounded'
-                          : currentWordIndex === idx
-                          ? 'bg-yellow-300 font-bold px-1 rounded animate-pulse'
-                          : isImportant
-                          ? 'bg-yellow-100 px-1 rounded underline decoration-wavy decoration-yellow-400 decoration-2'
-                          : ''
-                      }`}
-                      title={isImportant ? `📖 중요 단어: ${vocabInfo?.meaning}` : ''}
-                      onMouseEnter={(e) => {
-                        if (vocabInfo) {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setHoveredWord({
-                            word: cleanWord,
-                            x: rect.left,
-                            y: rect.top,
-                          });
-                        }
-                      }}
-                      onMouseLeave={() => setHoveredWord(null)}
-                    >
-                      {word}
-                    </span>
-                  );
-                })}
+                  return pages[currentPage].split(/(\s+)/).map((word, idx) => {
+                    const isSpace = /^\s+$/.test(word);
+                    const cleanWord = word.replace(/[^\w']/g, '').toLowerCase();
+                    const vocabInfo = isSpace ? undefined : getVocabularyInfo(cleanWord);
+                    const isImportant = !!vocabInfo;
+                    const isCurrent = currentWordIndex === idx;
+                    // 연속 형광: 읽은 위치 이하의 모든 토큰(공백 포함)에 배경 적용
+                    const isRead = maxReadIdx >= 0 && idx <= maxReadIdx;
+
+                    // 배경색: 현재 단어는 진한 노랑, 읽은 부분은 연한 노랑(연속)
+                    let bg = '';
+                    if (isCurrent) bg = 'bg-yellow-300';
+                    else if (isRead) bg = 'bg-yellow-200';
+                    else if (isImportant) bg = 'bg-yellow-100';
+
+                    // 중요 단어는 항상 물결 밑줄 (읽었든 안 읽었든)
+                    const underline = isImportant
+                      ? 'underline decoration-wavy decoration-yellow-500 decoration-2'
+                      : '';
+
+                    return (
+                      <span
+                        key={idx}
+                        className={`transition-colors duration-200 ${bg} ${underline} ${isImportant ? 'cursor-help font-medium' : ''} ${isCurrent ? 'font-bold' : ''}`}
+                        title={isImportant ? `📖 ${vocabInfo?.meaning}` : ''}
+                        onMouseEnter={(e) => {
+                          if (vocabInfo) {
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            setHoveredWord({ word: cleanWord, x: rect.left, y: rect.top });
+                          }
+                        }}
+                        onMouseLeave={() => setHoveredWord(null)}
+                      >
+                        {word}
+                      </span>
+                    );
+                  });
+                })()}
               </p>
+
+              {/* 번역문 — 원문 바로 아래 표시 */}
+              {translatedContent && (
+                <div className="mt-4 pt-4 border-t-2 border-dashed border-amber-300">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
+                      {SUPPORTED_LANGUAGES[targetLanguage]} 번역
+                    </span>
+                  </div>
+                  <p className="text-base md:text-lg leading-8 text-gray-600 text-justify whitespace-pre-wrap">
+                    {translatedContent}
+                  </p>
+                </div>
               )}
 
               {/* Tooltip */}
-              {hoveredWord && !translatedContent && getVocabularyInfo(hoveredWord.word) && (
+              {hoveredWord && getVocabularyInfo(hoveredWord.word) && (
                 <div
                   className="fixed bg-white border-2 border-yellow-400 rounded-lg shadow-xl p-4 z-50 max-w-xs"
                   style={{

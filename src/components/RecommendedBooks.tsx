@@ -8,18 +8,21 @@ interface RecommendedBooksProps {
 }
 
 export function RecommendedBooks({ onSelectBook }: RecommendedBooksProps) {
-  const [activeTab, setActiveTab] = useState<'trending' | 'level' | 'category'>('trending');
+  const [activeTab, setActiveTab] = useState<'trending' | 'level' | 'category'>('category');
 
   // 우리 데이터베이스에서 도서 로드
   const popularBooks = getPopularBooks(30); // 인기 도서 30권
 
-  const categories: Record<string, BookIndex[]> = {
-    literature: getBooksByCategory('literature'),
-    mystery: getBooksByCategory('mystery'),
-    fantasy: getBooksByCategory('fantasy'),
-    romance: getBooksByCategory('romance'),
-    adventure: getBooksByCategory('adventure'),
-  };
+  // 전체 도서관 카테고리 (책이 있는 카테고리만 표시)
+  const allCategoryKeys: BookIndex['category'][] = [
+    'literature', 'mystery', 'fantasy', 'romance', 'adventure',
+    'philosophy', 'history', 'science', 'poetry', 'drama',
+  ];
+  const categories: Record<string, BookIndex[]> = {};
+  allCategoryKeys.forEach((key) => {
+    const books = getBooksByCategory(key);
+    if (books.length > 0) categories[key] = books;
+  });
 
   const byLevel = {
     beginner: getBooksByLevel('beginner'),

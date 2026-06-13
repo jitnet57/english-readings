@@ -71,17 +71,55 @@ function stripGutenbergBoilerplate(raw: string): string {
   return text.trim();
 }
 
-// Vite dev 프록시 경유 직접 fetch (가장 안정적, CORS 없음)
-async function fetchViaViteProxy(bookId: number): Promise<string | null> {
+// 스트리밍으로 바이트 다운로드 진행률을 보고하며 텍스트를 읽음
+async function readStreamWithProgress(
+  response: Response,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  const contentLength = Number(response.headers.get('content-length')) || 0;
+  if (!response.body || !contentLength) {
+    // 길이를 모르면 진행률 없이 한 번에 읽음
+    return response.text();
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      chunks.push(value);
+      received += value.length;
+      onProgress?.(Math.min(99, Math.round((received / contentLength) * 100)));
+    }
+  }
+
+  const merged = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.length;
+  }
+  onProgress?.(100);
+  return new TextDecoder('utf-8').decode(merged);
+}
+
+// Vite dev 프록시 경유 직접 fetch (가장 안정적, CORS 없음) + 진행률
+async function fetchViaViteProxy(
+  bookId: number,
+  onProgress?: (percent: number) => void
+): Promise<string | null> {
   const paths = [
     `/gutenberg/cache/epub/${bookId}/pg${bookId}.txt`,
     `/gutenberg/files/${bookId}/${bookId}-0.txt`,
   ];
   for (const path of paths) {
     try {
-      const response = await fetch(path, { signal: AbortSignal.timeout(20000) });
+      const response = await fetch(path, { signal: AbortSignal.timeout(30000) });
       if (!response.ok) continue;
-      const text = await response.text();
+      const text = await readStreamWithProgress(response, onProgress);
       if (text && text.length > 5000) return text;
     } catch (error) {
       console.warn(`Vite proxy fetch failed for ${path}:`, error);
@@ -90,9 +128,12 @@ async function fetchViaViteProxy(bookId: number): Promise<string | null> {
   return null;
 }
 
-export async function getBookText(bookId: number): Promise<string> {
-  // 1순위: Vite dev 프록시 (안정적, CORS 없음)
-  const viteRaw = await fetchViaViteProxy(bookId);
+export async function getBookText(
+  bookId: number,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  // 1순위: Vite dev 프록시 (안정적, CORS 없음, 진행률 지원)
+  const viteRaw = await fetchViaViteProxy(bookId, onProgress);
   if (viteRaw) {
     const content = stripGutenbergBoilerplate(viteRaw);
     if (content.length > 1000) return content;

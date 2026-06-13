@@ -30,39 +30,42 @@ export function GutenbergSearcher({ onBack, selectedBook: initialBook }: Gutenbe
     loadDownloadedBooks();
   }, []);
 
+  // 공통 책 로더: 실시간 다운로드 진행률 + 페이지 준비 즉시 읽기 시작 (저장은 백그라운드)
+  const loadBook = async (book: BookIndex) => {
+    setSelectedBook(book);
+    setLoadingText(true);
+    setDownloadProgress(0);
+
+    try {
+      // 실제 다운로드 진행률을 스트리밍으로 표시
+      const text = await getBookText(book.id, (percent) => setDownloadProgress(percent));
+      const pages = splitIntoPages(text, 400); // 400단어 = 1페이지
+
+      // ⚡ 페이지가 준비되는 즉시 읽기 시작 (전체 저장을 기다리지 않음)
+      setBookPages(pages);
+      setDownloadProgress(100);
+      setLoadingText(false);
+
+      // 기기 저장은 백그라운드에서 진행 (읽기를 막지 않음)
+      downloadBook(book.id, book.title, book.author, text)
+        .then((success) => {
+          if (success) {
+            setDownloadedBooks(prev => new Set(prev).add(book.id));
+          }
+        })
+        .catch((err) => console.warn('Background save failed:', err));
+    } catch (error) {
+      console.error('Error loading book:', error);
+      alert('책을 로드하는 데 실패했습니다. 다른 책을 시도해보세요.');
+      setSelectedBook(null);
+      setLoadingText(false);
+    }
+  };
+
   // 추천 도서가 선택되면 자동 로드
   useEffect(() => {
     if (initialBook && !selectedBook) {
-      setSelectedBook(initialBook);
-      setLoadingText(true);
-      setDownloadProgress(0);
-
-      (async () => {
-        try {
-          const text = await getBookText(initialBook.id);
-          const pages = splitIntoPages(text, 400);
-          setBookPages(pages);
-
-          setDownloadProgress(50);
-          const success = await downloadBook(
-            initialBook.id,
-            initialBook.title,
-            initialBook.author,
-            text,
-            (progress) => setDownloadProgress(50 + progress / 2)
-          );
-
-          if (success) {
-            setDownloadedBooks(prev => new Set(prev).add(initialBook.id));
-            setDownloadProgress(100);
-          }
-        } catch (error) {
-          console.error('Error loading book:', error);
-          setSelectedBook(null);
-        }
-
-        setLoadingText(false);
-      })();
+      loadBook(initialBook);
     }
   }, [initialBook]);
 
@@ -77,38 +80,7 @@ export function GutenbergSearcher({ onBack, selectedBook: initialBook }: Gutenbe
     setLoading(false);
   };
 
-  const handleSelectBook = async (book: BookIndex) => {
-    setSelectedBook(book);
-    setLoadingText(true);
-    setDownloadProgress(0);
-
-    try {
-      const text = await getBookText(book.id);
-      const pages = splitIntoPages(text, 400); // 400단어 = 1페이지
-      setBookPages(pages);
-
-      // 자동 다운로드
-      setDownloadProgress(50);
-      const success = await downloadBook(
-        book.id,
-        book.title,
-        book.author,
-        text,
-        (progress) => setDownloadProgress(50 + progress / 2)
-      );
-
-      if (success) {
-        setDownloadedBooks(prev => new Set(prev).add(book.id));
-        setDownloadProgress(100);
-      }
-    } catch (error) {
-      console.error('Error loading book:', error);
-      alert('책을 로드하는 데 실패했습니다. 다른 책을 시도해보세요.');
-      setSelectedBook(null);
-    }
-
-    setLoadingText(false);
-  };
+  const handleSelectBook = (book: BookIndex) => loadBook(book);
 
   // 책 로딩 중
   if (selectedBook && loadingText) {
@@ -116,18 +88,22 @@ export function GutenbergSearcher({ onBack, selectedBook: initialBook }: Gutenbe
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center">
           <Loader className="animate-spin text-blue-500 mx-auto mb-4" size={48} />
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">책을 로드 중입니다...</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">📥 책을 다운로드 중입니다...</h2>
           <p className="text-gray-600 mb-6">{selectedBook.title}</p>
 
           {/* Download Progress */}
-          <div className="w-64 mx-auto">
-            <div className="h-2 bg-gray-300 rounded-full overflow-hidden">
+          <div className="w-72 mx-auto">
+            <div className="h-3 bg-gray-300 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-300"
+                className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-200"
                 style={{ width: `${downloadProgress}%` }}
               />
             </div>
-            <p className="text-sm text-gray-600 mt-2">{downloadProgress}% 다운로드됨</p>
+            <div className="flex justify-between text-sm text-gray-600 mt-2">
+              <span>{downloadProgress}% 다운로드됨</span>
+              <span className="font-medium">{downloadProgress >= 100 ? '✅ 완료' : '내려받는 중'}</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-3">⚡ 다운로드가 끝나면 바로 읽기가 시작됩니다</p>
           </div>
         </div>
       </div>
