@@ -20,7 +20,7 @@ export function TTSButton({ text, onWordHighlight, onHighlightedWords, onProgres
     const saved = localStorage.getItem('tts-sync-offset');
     return saved ? parseInt(saved) : 0;
   });
-  const highlightTimeoutRef = useRef<NodeJS.Timeout[]>([]);
+  const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const wordTimingsRef = useRef<number[]>([]);
 
   useEffect(() => {
