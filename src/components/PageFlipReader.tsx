@@ -364,17 +364,13 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
         </div>
       )}
 
-      {/* 중지 시 화면 중앙에 반투명 재생 버튼 (탭하면 멈춘 지점부터 이어읽기) */}
+      {/* 중지 시 화면 중앙에 반투명 재생 표시 (순수 시각 표시 — 호버/클릭 통과) */}
       {everStarted && !isReading && (
-        <button
-          onClick={() => ttsRef.current?.toggle()}
-          className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none"
-          aria-label="이어서 재생"
-        >
-          <span className="pointer-events-auto w-24 h-24 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white text-5xl shadow-2xl">
+        <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none">
+          <span className="w-24 h-24 rounded-full bg-black/30 backdrop-blur-sm flex items-center justify-center text-white text-5xl shadow-2xl">
             ▶
           </span>
-        </button>
+        </div>
       )}
 
       {/* Main Content - Book Page */}
@@ -419,7 +415,7 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
               onClick={handleScreenTap}
               onMouseUp={handleTextSelection}
               onTouchEnd={handleTextSelection}
-              className="flex-1 relative max-h-[55vh] overflow-y-auto pr-2 cursor-pointer"
+              className="flex-1 relative max-h-[55vh] overflow-y-auto pr-2 cursor-pointer select-text"
             >
               {/* 문장마다: 원문(형광색+펜슬) 첫째 줄, 번역 둘째 줄 */}
               {(() => {
