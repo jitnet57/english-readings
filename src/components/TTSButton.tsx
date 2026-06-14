@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { Volume2, Pause, Settings } from 'lucide-react';
 
 interface TTSButtonProps {
@@ -8,7 +8,14 @@ interface TTSButtonProps {
   onProgress?: (progress: number) => void;
 }
 
-export function TTSButton({ text, onWordHighlight, onHighlightedWords, onProgress }: TTSButtonProps) {
+export interface TTSHandle {
+  toggle: () => void;
+}
+
+export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButton(
+  { text, onWordHighlight, onHighlightedWords, onProgress },
+  ref
+) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -213,6 +220,11 @@ export function TTSButton({ text, onWordHighlight, onHighlightedWords, onProgres
     });
   };
 
+  // 외부(화면 터치 등)에서 재생/정지 토글 가능하도록 노출
+  useImperativeHandle(ref, () => ({
+    toggle: handleTTS,
+  }));
+
   return (
     <div className="relative">
       <div className="flex items-center gap-2">
@@ -257,8 +269,15 @@ export function TTSButton({ text, onWordHighlight, onHighlightedWords, onProgres
       </div>
 
       {showSettings && (
-        <div className="absolute top-full right-0 mt-2 bg-white border border-gray-300 rounded-lg shadow-lg p-4 z-40 min-w-80">
-          <h3 className="font-bold text-gray-800 mb-3">TTS 설정</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowSettings(false)}
+        >
+        <div
+          className="bg-white border border-gray-300 rounded-xl shadow-2xl p-6 w-full max-w-md max-h-[85vh] overflow-y-auto"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="font-bold text-gray-800 mb-4 text-lg">⚙️ TTS 설정</h3>
 
           {/* Voice Selection */}
           <div className="mb-4">
@@ -362,7 +381,8 @@ export function TTSButton({ text, onWordHighlight, onHighlightedWords, onProgres
             완료
           </button>
         </div>
+        </div>
       )}
     </div>
   );
-}
+});

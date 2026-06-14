@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { ChevronUp, ChevronDown, Globe } from 'lucide-react';
-import { TTSButton } from './TTSButton';
+import { TTSButton, type TTSHandle } from './TTSButton';
 import { BookDiscussion } from './BookDiscussion';
 import { getVocabularyInfo, levelColors, examColors, getLevelLabel } from '@/data/vocabularyData';
 import { SUPPORTED_LANGUAGES, type TargetLanguage } from '@/services/translationService';
@@ -31,6 +31,17 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
   const [translationProgress, setTranslationProgress] = useState<TranslationProgress | null>(null);
   const currentWordRef = useRef<HTMLSpanElement | null>(null);
   const textContainerRef = useRef<HTMLDivElement | null>(null);
+  const ttsRef = useRef<TTSHandle>(null);
+  const suppressTapRef = useRef(false);
+
+  // 화면 터치/클릭으로 재생·정지 토글 (스와이프 직후엔 무시)
+  const handleScreenTap = () => {
+    if (suppressTapRef.current) {
+      suppressTapRef.current = false;
+      return;
+    }
+    ttsRef.current?.toggle();
+  };
 
   // 자동 스크롤: 읽는 단어(빨간 펜슬 위치)로 화면을 부드럽게 이동
   useEffect(() => {
@@ -127,18 +138,15 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
     const endY = e.changedTouches[0].clientY;
     const diff = touches.startY - endY;
 
-    // 아래로 스와이프 (다음 페이지)
+    // 아래로 스와이프 (다음 페이지) — 스와이프 후 탭 토글 방지
     if (diff > 50) {
+      suppressTapRef.current = true;
       handleNextPage();
     }
     // 위로 스와이프 (이전 페이지)
     else if (diff < -50) {
+      suppressTapRef.current = true;
       handlePrevPage();
-    }
-    // 아래를 터치 (TTS 토글)
-    else if (Math.abs(diff) < 10 && endY > window.innerHeight * 0.7) {
-      // TTS 토글: 하단부 터치
-      console.log('Bottom tap detected - TTS toggle');
     }
   };
 
@@ -283,8 +291,12 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
                 )}
               </div>
 
-            {/* Page Text with Highlighting */}
-            <div ref={textContainerRef} className="flex-1 relative max-h-[55vh] overflow-y-auto pr-2">
+            {/* Page Text with Highlighting — 본문 터치/클릭으로 재생·정지 */}
+            <div
+              ref={textContainerRef}
+              onClick={handleScreenTap}
+              className="flex-1 relative max-h-[55vh] overflow-y-auto pr-2 cursor-pointer"
+            >
               {/* 원문 (항상 표시) — 읽은 부분 연속 형광색 + 중요 단어 강조 + 빨간 펜슬 */}
               <p className="text-base md:text-lg leading-loose text-gray-800 text-justify whitespace-pre-wrap">
                 {(() => {
@@ -303,14 +315,15 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
                     const isRead = maxReadIdx >= 0 && idx <= maxReadIdx;
 
                     // 배경색: 현재 단어는 진한 노랑, 읽은 부분은 연한 노랑(연속)
+                    // 중요 단어(아직 안 읽음)는 노랑과 구분되는 보라색 배경
                     let bg = '';
                     if (isCurrent) bg = 'bg-yellow-300';
                     else if (isRead) bg = 'bg-yellow-200';
-                    else if (isImportant) bg = 'bg-yellow-100';
+                    else if (isImportant) bg = 'bg-purple-100';
 
-                    // 중요 단어는 항상 물결 밑줄 (읽었든 안 읽었든)
+                    // 중요 단어(IELTS/TOEIC/TOEFL)는 항상 보라색 물결 밑줄 + 보라 글자
                     const underline = isImportant
-                      ? 'underline decoration-wavy decoration-yellow-500 decoration-2'
+                      ? 'underline decoration-wavy decoration-purple-500 decoration-2 text-purple-800'
                       : '';
                     // 현재 읽는 단어는 빨간 펜슬 밑줄
                     const pencilUnderline = isCurrent ? 'border-b-2 border-red-500' : '';
@@ -329,9 +342,9 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
                         }}
                         onMouseLeave={() => setHoveredWord(null)}
                       >
-                        {/* 🖍️ 빨간 펜슬 — 현재 읽는 단어 위에서 같이 이동 */}
+                        {/* 🖍️ 빨간 펜슬 — 문장 아래에서 위(단어)를 가리키며 같이 이동 */}
                         {isCurrent && (
-                          <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-sm pointer-events-none animate-bounce">
+                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-sm pointer-events-none animate-bounce">
                             ✏️
                           </span>
                         )}
