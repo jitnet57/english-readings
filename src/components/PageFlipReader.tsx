@@ -3,15 +3,43 @@ import { ChevronUp, ChevronDown, Globe } from 'lucide-react';
 import { TTSButton, type TTSHandle } from './TTSButton';
 import { BookDiscussion } from './BookDiscussion';
 import { getVocabularyInfo, levelColors, examColors, getLevelLabel } from '@/data/vocabularyData';
-import { SUPPORTED_LANGUAGES, type TargetLanguage } from '@/services/translationService';
-import { pageTranslationService, type TranslationProgress } from '@/services/pageTranslationService';
-import { getTranslatedBook } from '@/services/downloadService';
+import { SUPPORTED_LANGUAGES, translateText, type TargetLanguage } from '@/services/translationService';
 
 interface PageFlipReaderProps {
   title: string;
   author: string;
   pages: string[];
   onBack: () => void;
+}
+
+// 페이지를 문장 단위로 분리하되, 각 문장의 전역 토큰 시작 인덱스를 유지
+// (TTS 하이라이트가 전체 페이지 토큰 인덱스를 사용하므로 정합성 보장)
+interface SentenceGroup {
+  tokens: string[];
+  startIndex: number; // split(/(\s+)/) 배열에서 첫 토큰의 전역 인덱스
+  text: string;
+}
+
+function splitPageIntoSentences(pageText: string): SentenceGroup[] {
+  const tokens = pageText.split(/(\s+)/);
+  const groups: SentenceGroup[] = [];
+  let current: string[] = [];
+  let start = 0;
+
+  tokens.forEach((tok, idx) => {
+    if (current.length === 0) start = idx;
+    current.push(tok);
+    const trimmed = tok.trim();
+    // 문장 끝 부호(.!?)로 끝나는 토큰에서 한 문장 마무리
+    if (trimmed.length > 0 && /[.!?]["'’”)\]]?$/.test(trimmed)) {
+      groups.push({ tokens: current, startIndex: start, text: current.join('').trim() });
+      current = [];
+    }
+  });
+  if (current.length > 0) {
+    groups.push({ tokens: current, startIndex: start, text: current.join('').trim() });
+  }
+  return groups;
 }
 
 export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderProps) {
@@ -23,12 +51,12 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
   const [hoveredWord, setHoveredWord] = useState<{ word: string; x: number; y: number } | null>(null);
   const [ttsProgress, setTtsProgress] = useState(0);
   const [showDiscussion, setShowDiscussion] = useState(false);
-  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [targetLanguage, setTargetLanguage] = useState<TargetLanguage>('ko');
   const [isTranslating, setIsTranslating] = useState(false);
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
-  const [translatedPages, setTranslatedPages] = useState<Map<number, string>>(new Map());
-  const [translationProgress, setTranslationProgress] = useState<TranslationProgress | null>(null);
+  const [translationOn, setTranslationOn] = useState(false);
+  // pageIndex → 문장별 번역 배열 (문장 인덱스에 정렬)
+  const [sentenceTranslations, setSentenceTranslations] = useState<Map<number, string[]>>(new Map());
   const currentWordRef = useRef<HTMLSpanElement | null>(null);
   const textContainerRef = useRef<HTMLDivElement | null>(null);
   const ttsRef = useRef<TTSHandle>(null);
@@ -66,57 +94,52 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
     }
   }, [isAutoPlay, currentPage, pages.length]);
 
-  // 페이지 변경 시 번역 상태 업데이트
-  useEffect(() => {
-    if (translatedPages.has(currentPage)) {
-      setTranslatedContent(translatedPages.get(currentPage) || null);
-    } else {
-      setTranslatedContent(null);
-    }
-  }, [currentPage, translatedPages]);
-
-  // 번역 요청 (페이지별 순차 번역)
-  const handleTranslate = async () => {
-    setIsTranslating(true);
-
-    try {
-      // 캐시된 번역 확인
-      const cached = await getTranslatedBook(1, targetLanguage);
-      if (cached && cached.pages[currentPage]) {
-        setTranslatedContent(cached.pages[currentPage]);
-        setTranslatedPages(new Map(cached.pages.entries()));
-        setIsTranslating(false);
-        return;
+  // 한 페이지를 문장 단위로 번역 (각 문장이 완료될 때마다 점진적으로 표시)
+  const translatePageSentences = async (pageIndex: number) => {
+    const groups = splitPageIntoSentences(pages[pageIndex]);
+    const result: string[] = new Array(groups.length).fill('');
+    for (let i = 0; i < groups.length; i++) {
+      try {
+        result[i] = await translateText(groups[i].text, targetLanguage, 'mymemory');
+      } catch {
+        result[i] = '';
       }
-
-      // 페이지별 순차 번역 시작
-      const translatedPagesList: string[] = [];
-
-      await pageTranslationService.translatePagesSequentially(
-        1, // bookId (더미)
-        pages,
-        targetLanguage,
-        (progress) => {
-          setTranslationProgress(progress);
-        },
-        (pageIndex, translatedContent) => {
-          translatedPagesList[pageIndex] = translatedContent;
-          const newMap = new Map(translatedPages);
-          newMap.set(pageIndex, translatedContent);
-          setTranslatedPages(newMap);
-
-          // 첫 페이지 번역 완료 시 바로 표시
-          if (pageIndex === 0) {
-            setTranslatedContent(translatedContent);
-          }
-        }
-      );
-    } catch (error) {
-      console.error('Translation error:', error);
-    } finally {
-      setIsTranslating(false);
+      // 문장 하나 끝날 때마다 화면 갱신
+      setSentenceTranslations(prev => {
+        const next = new Map(prev);
+        next.set(pageIndex, [...result]);
+        return next;
+      });
     }
   };
+
+  // 번역 켜기: 현재 페이지를 문장별로 즉시 번역 → 이후 페이지는 백그라운드
+  const handleTranslate = async () => {
+    setTranslationOn(true);
+    if (sentenceTranslations.has(currentPage)) return;
+    setIsTranslating(true);
+    await translatePageSentences(currentPage);
+    setIsTranslating(false);
+
+    // 나머지 페이지 백그라운드 번역
+    (async () => {
+      for (let p = 0; p < pages.length; p++) {
+        if (p === currentPage) continue;
+        if (!sentenceTranslations.has(p)) {
+          await translatePageSentences(p);
+        }
+      }
+    })();
+  };
+
+  // 번역 모드에서 페이지 이동 시, 캐시 없으면 해당 페이지 문장 번역
+  useEffect(() => {
+    if (translationOn && !sentenceTranslations.has(currentPage)) {
+      setIsTranslating(true);
+      translatePageSentences(currentPage).finally(() => setIsTranslating(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, translationOn]);
 
   const handleNextPage = () => {
     if (currentPage < pages.length - 1) {
@@ -201,7 +224,7 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
                     onClick={() => {
                       setTargetLanguage(code as TargetLanguage);
                       setShowLanguageSelector(false);
-                      setTranslatedContent(null); // 언어 변경 시 번역 초기화
+                      setSentenceTranslations(new Map()); // 언어 변경 시 번역 초기화
                     }}
                     className={`w-full text-left px-4 py-2 text-sm border-b last:border-b-0 transition ${
                       targetLanguage === code
@@ -242,54 +265,27 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
           {/* Page Content */}
           <div className="bg-yellow-50 shadow-2xl rounded-r-lg p-8 md:p-12 min-h-96 flex flex-col justify-center book-page">
             {/* Translation Controls */}
-            <div className="mb-4 space-y-2">
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleTranslate}
-                    disabled={isTranslating}
-                    className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition"
-                  >
-                    {isTranslating ? '번역 중...' : `${SUPPORTED_LANGUAGES[targetLanguage]}로 번역`}
-                  </button>
-                  {translatedContent && (
-                    <button
-                      onClick={() => setTranslatedContent(null)}
-                      className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
-                    >
-                      번역 숨기기
-                    </button>
-                  )}
-                  {!translatedContent && translatedPages.has(currentPage) && (
-                    <button
-                      onClick={() => setTranslatedContent(translatedPages.get(currentPage) || null)}
-                      className="px-3 py-1 text-sm bg-green-500 text-white rounded hover:bg-green-600 transition"
-                    >
-                      번역 보기
-                    </button>
-                  )}
-                </div>
-
-                {/* 번역 진행률 */}
-                {isTranslating && translationProgress && (
-                  <div className="bg-blue-50 p-2 rounded text-xs space-y-1">
-                    <div className="flex justify-between">
-                      <span>번역 진행률</span>
-                      <span>{translationProgress.completedPages}/{translationProgress.totalPages} 페이지</span>
-                    </div>
-                    <div className="w-full h-2 bg-blue-200 rounded overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 transition-all"
-                        style={{
-                          width: `${(translationProgress.completedPages / translationProgress.totalPages) * 100}%`
-                        }}
-                      />
-                    </div>
-                    {translationProgress.error && (
-                      <p className="text-red-600">{translationProgress.error}</p>
-                    )}
-                  </div>
-                )}
-              </div>
+            <div className="mb-4 flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
+              {!translationOn ? (
+                <button
+                  onClick={handleTranslate}
+                  disabled={isTranslating}
+                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition"
+                >
+                  {isTranslating ? '번역 중...' : `📖 ${SUPPORTED_LANGUAGES[targetLanguage]} 문장별 번역`}
+                </button>
+              ) : (
+                <button
+                  onClick={() => setTranslationOn(false)}
+                  className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
+                >
+                  번역 숨기기
+                </button>
+              )}
+              {isTranslating && (
+                <span className="text-xs text-blue-600 animate-pulse">문장 번역 중...</span>
+              )}
+            </div>
 
             {/* Page Text with Highlighting — 본문 터치/클릭으로 재생·정지 */}
             <div
@@ -297,77 +293,79 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
               onClick={handleScreenTap}
               className="flex-1 relative max-h-[55vh] overflow-y-auto pr-2 cursor-pointer"
             >
-              {/* 원문 (항상 표시) — 읽은 부분 연속 형광색 + 중요 단어 강조 + 빨간 펜슬 */}
-              <p className="text-base md:text-lg leading-loose text-gray-800 text-justify whitespace-pre-wrap">
-                {(() => {
-                  // 읽은 위치까지 연속 형광색을 만들기 위해 최대 읽은 토큰 인덱스 계산
-                  const maxReadIdx = highlightedWords.size > 0
-                    ? Math.max(...Array.from(highlightedWords), currentWordIndex)
-                    : currentWordIndex;
+              {/* 문장마다: 원문(형광색+펜슬) 첫째 줄, 번역 둘째 줄 */}
+              {(() => {
+                // 읽은 위치까지 연속 형광색을 위한 최대 읽은 토큰 인덱스
+                const maxReadIdx = highlightedWords.size > 0
+                  ? Math.max(...Array.from(highlightedWords), currentWordIndex)
+                  : currentWordIndex;
 
-                  return pages[currentPage].split(/(\s+)/).map((word, idx) => {
-                    const isSpace = /^\s+$/.test(word);
-                    const cleanWord = word.replace(/[^\w']/g, '').toLowerCase();
-                    const vocabInfo = isSpace ? undefined : getVocabularyInfo(cleanWord);
-                    const isImportant = !!vocabInfo;
-                    const isCurrent = currentWordIndex === idx;
-                    // 연속 형광: 읽은 위치 이하의 모든 토큰(공백 포함)에 배경 적용
-                    const isRead = maxReadIdx >= 0 && idx <= maxReadIdx;
+                const groups = splitPageIntoSentences(pages[currentPage]);
+                const pageTranslations = sentenceTranslations.get(currentPage);
 
-                    // 배경색: 현재 단어는 진한 노랑, 읽은 부분은 연한 노랑(연속)
-                    // 중요 단어(아직 안 읽음)는 노랑과 구분되는 보라색 배경
-                    let bg = '';
-                    if (isCurrent) bg = 'bg-yellow-300';
-                    else if (isRead) bg = 'bg-yellow-200';
-                    else if (isImportant) bg = 'bg-purple-100';
+                // 한 토큰(단어/공백)을 렌더링 (전역 인덱스 사용)
+                const renderToken = (word: string, idx: number) => {
+                  const isSpace = /^\s+$/.test(word);
+                  const cleanWord = word.replace(/[^\w']/g, '').toLowerCase();
+                  const vocabInfo = isSpace ? undefined : getVocabularyInfo(cleanWord);
+                  const isImportant = !!vocabInfo;
+                  const isCurrent = currentWordIndex === idx;
+                  const isRead = maxReadIdx >= 0 && idx <= maxReadIdx;
 
-                    // 중요 단어(IELTS/TOEIC/TOEFL)는 항상 보라색 물결 밑줄 + 보라 글자
-                    const underline = isImportant
-                      ? 'underline decoration-wavy decoration-purple-500 decoration-2 text-purple-800'
-                      : '';
-                    // 현재 읽는 단어는 빨간 펜슬 밑줄
-                    const pencilUnderline = isCurrent ? 'border-b-2 border-red-500' : '';
+                  let bg = '';
+                  if (isCurrent) bg = 'bg-yellow-300';
+                  else if (isRead) bg = 'bg-yellow-200';
+                  else if (isImportant) bg = 'bg-purple-100';
 
-                    return (
-                      <span
-                        key={idx}
-                        ref={isCurrent ? currentWordRef : undefined}
-                        className={`relative transition-colors duration-200 ${bg} ${underline} ${pencilUnderline} ${isImportant ? 'cursor-help font-medium' : ''} ${isCurrent ? 'font-bold' : ''}`}
-                        title={isImportant ? `📖 ${vocabInfo?.meaning}` : ''}
-                        onMouseEnter={(e) => {
-                          if (vocabInfo) {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            setHoveredWord({ word: cleanWord, x: rect.left, y: rect.top });
-                          }
-                        }}
-                        onMouseLeave={() => setHoveredWord(null)}
-                      >
-                        {/* 🖍️ 빨간 펜슬 — 문장 아래에서 위(단어)를 가리키며 같이 이동 */}
-                        {isCurrent && (
-                          <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-sm pointer-events-none animate-bounce">
-                            ✏️
-                          </span>
-                        )}
-                        {word}
-                      </span>
-                    );
-                  });
-                })()}
-              </p>
+                  const underline = isImportant
+                    ? 'underline decoration-wavy decoration-purple-500 decoration-2 text-purple-800'
+                    : '';
+                  const pencilUnderline = isCurrent ? 'border-b-2 border-red-500' : '';
 
-              {/* 번역문 — 원문 바로 아래 표시 */}
-              {translatedContent && (
-                <div className="mt-4 pt-4 border-t-2 border-dashed border-amber-300">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded">
-                      {SUPPORTED_LANGUAGES[targetLanguage]} 번역
+                  return (
+                    <span
+                      key={idx}
+                      ref={isCurrent ? currentWordRef : undefined}
+                      className={`relative transition-colors duration-200 ${bg} ${underline} ${pencilUnderline} ${isImportant ? 'cursor-help font-medium' : ''} ${isCurrent ? 'font-bold' : ''}`}
+                      title={isImportant ? `📖 ${vocabInfo?.meaning}` : ''}
+                      onMouseEnter={(e) => {
+                        if (vocabInfo) {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setHoveredWord({ word: cleanWord, x: rect.left, y: rect.top });
+                        }
+                      }}
+                      onMouseLeave={() => setHoveredWord(null)}
+                    >
+                      {isCurrent && (
+                        <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-sm pointer-events-none animate-bounce">
+                          ✏️
+                        </span>
+                      )}
+                      {word}
                     </span>
-                  </div>
-                  <p className="text-base md:text-lg leading-8 text-gray-600 text-justify whitespace-pre-wrap">
-                    {translatedContent}
-                  </p>
-                </div>
-              )}
+                  );
+                };
+
+                return groups.map((group, gi) => {
+                  const translation = pageTranslations?.[gi];
+                  return (
+                    <div key={group.startIndex} className="mb-4">
+                      {/* 1번째 줄: 원문 */}
+                      <p className="text-base md:text-lg leading-loose text-gray-800 text-justify whitespace-pre-wrap">
+                        {group.tokens.map((tok, j) => renderToken(tok, group.startIndex + j))}
+                      </p>
+                      {/* 2번째 줄: 번역 */}
+                      {translationOn && (
+                        <p className="text-sm md:text-base leading-relaxed text-blue-700 pl-3 border-l-2 border-blue-300 mt-1">
+                          {translation
+                            ? translation
+                            : <span className="text-gray-400 italic">번역 중...</span>}
+                        </p>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
 
               {/* Tooltip */}
               {hoveredWord && getVocabularyInfo(hoveredWord.word) && (
