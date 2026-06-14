@@ -6,14 +6,16 @@ interface TTSButtonProps {
   onWordHighlight?: (wordIndex: number) => void;
   onHighlightedWords?: (indices: Set<number>) => void;
   onProgress?: (progress: number) => void;
+  onFinish?: () => void; // 자연스럽게 낭독이 끝났을 때 (정지 버튼 아님)
 }
 
 export interface TTSHandle {
   toggle: () => void;
+  play: () => void;
 }
 
 export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButton(
-  { text, onWordHighlight, onHighlightedWords, onProgress },
+  { text, onWordHighlight, onHighlightedWords, onProgress, onFinish },
   ref
 ) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -28,6 +30,7 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
     return saved ? parseInt(saved) : 0;
   });
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const manuallyStoppedRef = useRef(false); // 사용자가 정지를 눌렀는지 (자연 종료와 구분)
 
   useEffect(() => {
     const updateVoices = () => {
@@ -89,6 +92,7 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
 
   const handleTTS = () => {
     if (isPlaying) {
+      manuallyStoppedRef.current = true; // 사용자 정지 → 자동 다음 페이지 안 함
       window.speechSynthesis.cancel();
       setIsPlaying(false);
       // 타임아웃 정리
@@ -99,6 +103,7 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
       }
       return;
     }
+    manuallyStoppedRef.current = false;
 
     if (!text || voices.length === 0) return;
 
@@ -177,6 +182,11 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
       highlightTimeoutRef.current = [];
       onProgress?.(100);
       onHighlightedWords?.(new Set());
+      // 사용자가 정지한 게 아니라 자연스럽게 끝났으면 → 다음 페이지 계속 읽기
+      if (!manuallyStoppedRef.current) {
+        onFinish?.();
+      }
+      manuallyStoppedRef.current = false;
     };
 
     utterance.onerror = () => {
@@ -223,6 +233,9 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
   // 외부(화면 터치 등)에서 재생/정지 토글 가능하도록 노출
   useImperativeHandle(ref, () => ({
     toggle: handleTTS,
+    play: () => {
+      if (!isPlaying) handleTTS();
+    },
   }));
 
   return (

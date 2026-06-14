@@ -70,6 +70,24 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
   const textContainerRef = useRef<HTMLDivElement | null>(null);
   const ttsRef = useRef<TTSHandle>(null);
   const suppressTapRef = useRef(false);
+  const pendingAutoPlayRef = useRef(false);
+
+  // TTS가 한 페이지를 다 읽으면 → 다음 페이지로 넘어가 계속 읽기
+  const handleTtsFinish = () => {
+    if (currentPage < pages.length - 1) {
+      pendingAutoPlayRef.current = true;
+      setCurrentPage((p) => p + 1);
+    }
+  };
+
+  // 페이지가 바뀐 뒤 자동 재생 예약이 있으면 새 페이지를 이어서 읽기
+  useEffect(() => {
+    if (pendingAutoPlayRef.current) {
+      pendingAutoPlayRef.current = false;
+      const t = setTimeout(() => ttsRef.current?.play(), 400);
+      return () => clearTimeout(t);
+    }
+  }, [currentPage]);
   // 메모 클립
   const [memos, setMemos] = useState<Memo[]>(() => getMemosForBook(bookId));
   const [showMemos, setShowMemos] = useState(false);
@@ -405,7 +423,7 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
                       onMouseLeave={() => setHoveredWord(null)}
                     >
                       {isCurrent && (
-                        <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-sm pointer-events-none animate-bounce">
+                        <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-sm pointer-events-none animate-bounce rotate-180 inline-block">
                           ✏️
                         </span>
                       )}
@@ -521,10 +539,12 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
           {/* TTS Button */}
           <div className="flex justify-center mb-4">
             <TTSButton
+              ref={ttsRef}
               text={pages[currentPage]}
               onWordHighlight={(idx) => setCurrentWordIndex(idx)}
               onHighlightedWords={(indices) => setHighlightedWords(indices)}
               onProgress={(progress) => setTtsProgress(progress)}
+              onFinish={handleTtsFinish}
             />
           </div>
 
