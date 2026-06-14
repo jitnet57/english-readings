@@ -7,6 +7,7 @@ interface TTSButtonProps {
   onHighlightedWords?: (indices: Set<number>) => void;
   onProgress?: (progress: number) => void;
   onFinish?: () => void; // 자연스럽게 낭독이 끝났을 때 (정지 버튼 아님)
+  onPlayingChange?: (playing: boolean) => void; // 재생/정지 상태 변화
 }
 
 export interface TTSHandle {
@@ -15,7 +16,7 @@ export interface TTSHandle {
 }
 
 export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButton(
-  { text, onWordHighlight, onHighlightedWords, onProgress, onFinish },
+  { text, onWordHighlight, onHighlightedWords, onProgress, onFinish, onPlayingChange },
   ref
 ) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -31,6 +32,23 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
   });
   const highlightTimeoutRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const manuallyStoppedRef = useRef(false); // 사용자가 정지를 눌렀는지 (자연 종료와 구분)
+
+  // 재생 상태를 부모에 알림
+  useEffect(() => {
+    onPlayingChange?.(isPlaying);
+  }, [isPlaying]);
+
+  // Chrome이 긴 텍스트에서 자동으로 멈추는 버그 방지 (사용자 정지가 아닐 때만 resume)
+  useEffect(() => {
+    if (!isPlaying) return;
+    const keepAlive = setInterval(() => {
+      const synth = window.speechSynthesis;
+      if (synth.speaking && synth.paused && !manuallyStoppedRef.current) {
+        synth.resume();
+      }
+    }, 8000);
+    return () => clearInterval(keepAlive);
+  }, [isPlaying]);
 
   useEffect(() => {
     const updateVoices = () => {
@@ -91,18 +109,26 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
   }, [isPlaying, voices, selectedVoiceIndex, rate, pitch, text]);
 
   const handleTTS = () => {
-    if (isPlaying) {
+    const synth = window.speechSynthesis;
+
+    // 현재 말하는 중 → 일시정지 (위치 유지, 다시 누르면 이어서)
+    if (synth.speaking && !synth.paused) {
       manuallyStoppedRef.current = true; // 사용자 정지 → 자동 다음 페이지 안 함
-      window.speechSynthesis.cancel();
+      synth.pause();
       setIsPlaying(false);
-      // 타임아웃 정리
-      highlightTimeoutRef.current.forEach(timeout => clearTimeout(timeout));
+      highlightTimeoutRef.current.forEach((t) => clearTimeout(t));
       highlightTimeoutRef.current = [];
-      if (onHighlightedWords) {
-        onHighlightedWords(new Set());
-      }
       return;
     }
+
+    // 일시정지 상태 → 멈춘 지점부터 이어서 재생
+    if (synth.paused) {
+      manuallyStoppedRef.current = false;
+      synth.resume();
+      setIsPlaying(true);
+      return;
+    }
+
     manuallyStoppedRef.current = false;
 
     if (!text || voices.length === 0) return;

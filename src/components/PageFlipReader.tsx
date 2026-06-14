@@ -71,6 +71,8 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
   const ttsRef = useRef<TTSHandle>(null);
   const suppressTapRef = useRef(false);
   const pendingAutoPlayRef = useRef(false);
+  const [isReading, setIsReading] = useState(false);
+  const [everStarted, setEverStarted] = useState(false);
 
   // TTS가 한 페이지를 다 읽으면 → 다음 페이지로 넘어가 계속 읽기
   const handleTtsFinish = () => {
@@ -88,6 +90,33 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
       return () => clearTimeout(t);
     }
   }, [currentPage]);
+
+  // 읽는 동안 화면이 꺼지지 않도록 Wake Lock 유지 (백그라운드 낭독 유지)
+  useEffect(() => {
+    let lock: any = null;
+    const acquire = async () => {
+      try {
+        if ('wakeLock' in navigator && isReading) {
+          lock = await (navigator as any).wakeLock.request('screen');
+        }
+      } catch {
+        /* 미지원/거부 시 무시 */
+      }
+    };
+    if (isReading) acquire();
+    // 탭이 다시 보이면 재획득 (wake lock은 탭 숨김 시 해제됨)
+    const onVis = () => {
+      if (document.visibilityState === 'visible' && isReading) acquire();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      document.removeEventListener('visibilitychange', onVis);
+      if (lock) {
+        lock.release().catch(() => {});
+        lock = null;
+      }
+    };
+  }, [isReading]);
   // 메모 클립
   const [memos, setMemos] = useState<Memo[]>(() => getMemosForBook(bookId));
   const [showMemos, setShowMemos] = useState(false);
@@ -335,6 +364,19 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
         </div>
       )}
 
+      {/* 중지 시 화면 중앙에 반투명 재생 버튼 (탭하면 멈춘 지점부터 이어읽기) */}
+      {everStarted && !isReading && (
+        <button
+          onClick={() => ttsRef.current?.toggle()}
+          className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none"
+          aria-label="이어서 재생"
+        >
+          <span className="pointer-events-auto w-24 h-24 rounded-full bg-black/40 backdrop-blur-sm flex items-center justify-center text-white text-5xl shadow-2xl">
+            ▶
+          </span>
+        </button>
+      )}
+
       {/* Main Content - Book Page */}
       <div
         className="flex-1 flex items-center justify-center p-4 md:p-8 overflow-hidden cursor-pointer select-none"
@@ -423,9 +465,17 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
                       onMouseLeave={() => setHoveredWord(null)}
                     >
                       {isCurrent && (
-                        <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-sm pointer-events-none animate-bounce rotate-180 inline-block">
-                          ✏️
-                        </span>
+                        // 🔺 빨간 삼각형 포인터 — 문장(단어)을 위로 가리킴
+                        <span
+                          className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 pointer-events-none animate-bounce"
+                          style={{
+                            width: 0,
+                            height: 0,
+                            borderLeft: '6px solid transparent',
+                            borderRight: '6px solid transparent',
+                            borderBottom: '9px solid #ef4444',
+                          }}
+                        />
                       )}
                       {word}
                     </span>
@@ -545,6 +595,10 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
               onHighlightedWords={(indices) => setHighlightedWords(indices)}
               onProgress={(progress) => setTtsProgress(progress)}
               onFinish={handleTtsFinish}
+              onPlayingChange={(playing) => {
+                setIsReading(playing);
+                if (playing) setEverStarted(true);
+              }}
             />
           </div>
 

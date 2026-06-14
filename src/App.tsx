@@ -45,7 +45,7 @@ function App() {
       <div className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-12 px-4">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
-            <h1 className="text-5xl font-bold mb-2">📚 EWA</h1>
+            <h1 className="text-5xl font-bold mb-2">📚 SMEAG</h1>
             <p className="text-xl opacity-90">English Reading App with Korean Translation</p>
           </div>
           <div className="flex gap-3">
