@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronUp, ChevronDown, Globe } from 'lucide-react';
+import { ChevronUp, ChevronDown, Globe, StickyNote, Trash2, X } from 'lucide-react';
 import { TTSButton, type TTSHandle } from './TTSButton';
 import { BookDiscussion } from './BookDiscussion';
 import { getVocabularyInfo, levelColors, examColors, getLevelLabel } from '@/data/vocabularyData';
 import { SUPPORTED_LANGUAGES, translateText, type TargetLanguage } from '@/services/translationService';
+import {
+  saveProgress, getProgress, saveLastRead,
+  addMemo, deleteMemo, getMemosForBook, type Memo,
+} from '@/services/readingStore';
 
 interface PageFlipReaderProps {
+  bookId: number;
   title: string;
   author: string;
   pages: string[];
@@ -42,8 +47,12 @@ function splitPageIntoSentences(pageText: string): SentenceGroup[] {
   return groups;
 }
 
-export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderProps) {
-  const [currentPage, setCurrentPage] = useState(0);
+export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFlipReaderProps) {
+  // 이어 읽기: 저장된 진행 위치에서 시작 (범위 보정)
+  const [currentPage, setCurrentPage] = useState(() => {
+    const saved = getProgress(bookId);
+    return saved < pages.length ? saved : 0;
+  });
   const [isAutoPlay, setIsAutoPlay] = useState(false);
   const [touches, setTouches] = useState({ startY: 0, endY: 0 });
   const [highlightedWords, setHighlightedWords] = useState<Set<number>>(new Set());
@@ -61,13 +70,58 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
   const textContainerRef = useRef<HTMLDivElement | null>(null);
   const ttsRef = useRef<TTSHandle>(null);
   const suppressTapRef = useRef(false);
+  // 메모 클립
+  const [memos, setMemos] = useState<Memo[]>(() => getMemosForBook(bookId));
+  const [showMemos, setShowMemos] = useState(false);
+  const [selectionInfo, setSelectionInfo] = useState<{ text: string; x: number; y: number } | null>(null);
 
-  // 화면 터치/클릭으로 재생·정지 토글 (스와이프 직후엔 무시)
+  // 진행 위치 + 이어읽기 정보 저장 (페이지 이동 시)
+  useEffect(() => {
+    saveProgress(bookId, currentPage);
+    saveLastRead({
+      bookId, title, author,
+      page: currentPage, totalPages: pages.length, savedAt: Date.now(),
+    });
+  }, [bookId, currentPage, title, author, pages.length]);
+
+  // 드래그 선택 → 메모 추가 버튼 표시
+  const handleTextSelection = () => {
+    const sel = window.getSelection();
+    const text = sel?.toString().trim() || '';
+    if (text.length > 0 && sel && sel.rangeCount > 0) {
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      setSelectionInfo({ text, x: rect.left + rect.width / 2, y: rect.top });
+    } else {
+      setSelectionInfo(null);
+    }
+  };
+
+  const handleAddMemo = () => {
+    if (!selectionInfo) return;
+    const note = window.prompt(`메모 (선택: "${selectionInfo.text.slice(0, 40)}...")`, '') ?? '';
+    addMemo({
+      bookId, bookTitle: title, page: currentPage,
+      text: selectionInfo.text, note,
+    });
+    setMemos(getMemosForBook(bookId));
+    setSelectionInfo(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const handleDeleteMemo = (id: string) => {
+    deleteMemo(id);
+    setMemos(getMemosForBook(bookId));
+  };
+
+  // 화면 터치/클릭으로 재생·정지 토글 (스와이프·텍스트선택 중엔 무시)
   const handleScreenTap = () => {
     if (suppressTapRef.current) {
       suppressTapRef.current = false;
       return;
     }
+    // 드래그로 텍스트를 선택 중이면 토글하지 않음 (메모용 선택 보호)
+    const sel = window.getSelection()?.toString().trim() || '';
+    if (sel.length > 0) return;
     ttsRef.current?.toggle();
   };
 
@@ -204,6 +258,18 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
           >
             💬
           </button>
+          <button
+            onClick={() => setShowMemos(!showMemos)}
+            className="text-2xl hover:opacity-80 transition ml-4 relative"
+            title="메모 클립"
+          >
+            📎
+            {memos.length > 0 && (
+              <span className="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                {memos.length}
+              </span>
+            )}
+          </button>
 
           {/* Language Selector */}
           <div className="relative ml-4">
@@ -291,6 +357,8 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
             <div
               ref={textContainerRef}
               onClick={handleScreenTap}
+              onMouseUp={handleTextSelection}
+              onTouchEnd={handleTextSelection}
               className="flex-1 relative max-h-[55vh] overflow-y-auto pr-2 cursor-pointer"
             >
               {/* 문장마다: 원문(형광색+펜슬) 첫째 줄, 번역 둘째 줄 */}
@@ -496,6 +564,54 @@ export function PageFlipReader({ title, author, pages, onBack }: PageFlipReaderP
           </div>
         </div>
       </div>
+
+      {/* 드래그 선택 → 메모 추가 플로팅 버튼 */}
+      {selectionInfo && (
+        <button
+          onClick={handleAddMemo}
+          className="fixed z-50 flex items-center gap-1 px-3 py-2 bg-amber-500 text-white rounded-lg shadow-xl text-sm font-bold hover:bg-amber-600 transition -translate-x-1/2 -translate-y-full"
+          style={{ left: `${selectionInfo.x}px`, top: `${selectionInfo.y - 8}px` }}
+        >
+          <StickyNote size={16} /> 메모 저장
+        </button>
+      )}
+
+      {/* 메모 클립 패널 */}
+      {showMemos && (
+        <div className="fixed inset-y-0 right-0 z-50 w-80 bg-white shadow-2xl flex flex-col">
+          <div className="bg-gradient-to-r from-amber-600 to-orange-600 text-white p-4 flex items-center justify-between">
+            <h3 className="font-bold flex items-center gap-2">📎 메모 클립 ({memos.length})</h3>
+            <button onClick={() => setShowMemos(false)} className="hover:opacity-80">
+              <X size={20} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {memos.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center mt-8">
+                본문에서 중요한 곳을 드래그하면<br />메모를 저장할 수 있어요.
+              </p>
+            ) : (
+              memos.map((memo) => (
+                <div key={memo.id} className="border border-amber-200 rounded-lg p-3 bg-amber-50">
+                  <div className="flex justify-between items-start gap-2">
+                    <button
+                      onClick={() => { setCurrentPage(memo.page); setShowMemos(false); }}
+                      className="text-xs font-bold text-amber-700 hover:underline"
+                    >
+                      📖 {memo.page + 1}페이지로 이동
+                    </button>
+                    <button onClick={() => handleDeleteMemo(memo.id)} className="text-gray-400 hover:text-red-500">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-800 mt-2 italic">"{memo.text}"</p>
+                  {memo.note && <p className="text-xs text-blue-700 mt-2 border-t pt-2">📝 {memo.note}</p>}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       {/* AI Discussion Panel */}
       {showDiscussion && (

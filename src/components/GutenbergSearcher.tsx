@@ -5,6 +5,7 @@ import { downloadBook, getAllDownloadedBooks } from '@/services/downloadService'
 import { searchBooksIndex, getPopularBooks } from '@/data/booksDatabase';
 import type { BookIndex } from '@/data/booksDatabase';
 import { PageFlipReader } from './PageFlipReader';
+import { coverUrl } from '@/services/readingStore';
 
 interface GutenbergSearcherProps {
   onBack: () => void;
@@ -114,6 +115,7 @@ export function GutenbergSearcher({ onBack, selectedBook: initialBook }: Gutenbe
   if (selectedBook && bookPages.length > 0) {
     return (
       <PageFlipReader
+        bookId={selectedBook.id}
         title={selectedBook.title}
         author={selectedBook.author}
         pages={bookPages}
@@ -180,7 +182,21 @@ export function GutenbergSearcher({ onBack, selectedBook: initialBook }: Gutenbe
                 onClick={() => handleSelectBook(book)}
                 className="p-4 bg-white rounded-lg shadow hover:shadow-lg transition relative group"
               >
-                <div className="text-3xl mb-2">📖</div>
+                {/* 북커버 (로드 실패 시 이모지 폴백) */}
+                <div className="w-full h-40 mb-2 rounded overflow-hidden bg-gradient-to-br from-amber-100 to-orange-200 flex items-center justify-center">
+                  <img
+                    src={coverUrl(book.id)}
+                    alt={book.title}
+                    loading="lazy"
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      const t = e.currentTarget;
+                      t.style.display = 'none';
+                      (t.nextElementSibling as HTMLElement).style.display = 'flex';
+                    }}
+                  />
+                  <div className="text-4xl w-full h-full items-center justify-center" style={{ display: 'none' }}>📖</div>
+                </div>
                 <h3 className="font-bold text-sm line-clamp-2 mb-1">{book.title}</h3>
                 <p className="text-xs text-gray-600">{book.author}</p>
                 <p className="text-xs text-gray-500 mt-2">⭐ {book.rating || 0}</p>

@@ -5,12 +5,14 @@ import { GutenbergSearcher } from '@/components/GutenbergSearcher';
 import { RecommendedBooks } from '@/components/RecommendedBooks';
 import { Search, BookOpen } from 'lucide-react';
 import { Book } from '@/types/book';
+import { getLastRead, coverUrl } from '@/services/readingStore';
 
 function App() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showGutenberg, setShowGutenberg] = useState(false);
   const [selectedBookIndex, setSelectedBookIndex] = useState<any>(null);
+  const lastRead = getLastRead();
 
   if (selectedBook) {
     return <BookReader book={selectedBook} onBack={() => setSelectedBook(null)} />;
@@ -67,6 +69,41 @@ function App() {
 
       {/* Main Content */}
       <div className="max-w-6xl mx-auto px-4 py-12">
+        {/* 이어 읽기 (마지막 읽은 곳) */}
+        {lastRead && (
+          <div className="mb-10">
+            <h2 className="text-2xl font-bold mb-3">📖 이어 읽기</h2>
+            <button
+              onClick={() => {
+                setSelectedBookIndex({ id: lastRead.bookId, title: lastRead.title, author: lastRead.author });
+                setShowGutenberg(true);
+              }}
+              className="w-full md:w-auto flex items-center gap-4 bg-white rounded-xl shadow-md hover:shadow-xl transition p-4 text-left border-l-4 border-amber-500"
+            >
+              <div className="w-16 h-24 rounded overflow-hidden bg-gradient-to-br from-amber-100 to-orange-200 flex items-center justify-center flex-shrink-0">
+                <img
+                  src={coverUrl(lastRead.bookId)}
+                  alt={lastRead.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    const t = e.currentTarget;
+                    t.style.display = 'none';
+                    (t.nextElementSibling as HTMLElement).style.display = 'flex';
+                  }}
+                />
+                <div className="text-3xl w-full h-full items-center justify-center" style={{ display: 'none' }}>📖</div>
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">{lastRead.title}</h3>
+                <p className="text-sm text-gray-600">{lastRead.author}</p>
+                <p className="text-sm text-amber-700 mt-2 font-medium">
+                  {lastRead.page + 1} / {lastRead.totalPages} 페이지부터 이어 읽기 →
+                </p>
+              </div>
+            </button>
+          </div>
+        )}
+
         {/* Features */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
           <div className="bg-white rounded-lg shadow-md p-6">
