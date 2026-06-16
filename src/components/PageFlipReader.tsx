@@ -121,6 +121,7 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
   const [memos, setMemos] = useState<Memo[]>(() => getMemosForBook(bookId));
   const [showMemos, setShowMemos] = useState(false);
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [selectionTranslation, setSelectionTranslation] = useState<string>('');
 
   // 진행 위치 + 이어읽기 정보 저장 (페이지 이동 시)
   useEffect(() => {
@@ -131,15 +132,21 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
     });
   }, [bookId, currentPage, title, author, pages.length]);
 
-  // 드래그 선택 → 메모 추가 버튼 표시
+  // 드래그 선택 → 메모 추가 버튼 + 해석 표시
   const handleTextSelection = () => {
     const sel = window.getSelection();
     const text = sel?.toString().trim() || '';
     if (text.length > 0 && sel && sel.rangeCount > 0) {
       const rect = sel.getRangeAt(0).getBoundingClientRect();
-      setSelectionInfo({ text, x: rect.left + rect.width / 2, y: rect.top });
+      setSelectionInfo({ text, x: rect.left + rect.width / 2, y: rect.bottom });
+      // 선택한 문장 해석 (비동기)
+      setSelectionTranslation('');
+      translateText(text, targetLanguage, 'mymemory')
+        .then((t) => setSelectionTranslation(t))
+        .catch(() => setSelectionTranslation(''));
     } else {
       setSelectionInfo(null);
+      setSelectionTranslation('');
     }
   };
 
@@ -364,6 +371,55 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
         </div>
       )}
 
+      {/* 상단 컨트롤 (들으기 + 이전/다음 + 진행도, 항상 노출) */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+        <div className="max-w-4xl mx-auto flex flex-col gap-2">
+          {/* 진행 바 */}
+          <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          {/* 이전 · 들으기 · 다음 */}
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={handlePrevPage}
+              disabled={currentPage === 0}
+              className="flex items-center gap-1 px-3 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              <ChevronUp size={18} />
+              <span className="text-sm font-medium hidden sm:inline">이전</span>
+            </button>
+
+            <TTSButton
+              ref={ttsRef}
+              text={pages[currentPage]}
+              onWordHighlight={(idx) => setCurrentWordIndex(idx)}
+              onHighlightedWords={(indices) => setHighlightedWords(indices)}
+              onProgress={(p) => setTtsProgress(p)}
+              onFinish={handleTtsFinish}
+              onPlayingChange={(playing) => {
+                setIsReading(playing);
+                if (playing) setEverStarted(true);
+              }}
+            />
+
+            <button
+              onClick={handleNextPage}
+              disabled={currentPage === pages.length - 1}
+              className="flex items-center gap-1 px-3 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              <span className="text-sm font-medium hidden sm:inline">다음</span>
+              <ChevronDown size={18} />
+            </button>
+          </div>
+          <p className="text-xs text-gray-500 text-center">
+            {currentPage + 1} / {pages.length} pages · 스페이스바/화면 탭으로 재생·정지
+          </p>
+        </div>
+      </div>
+
       {/* 중지 시 화면 중앙에 반투명 재생 표시 (순수 시각 표시 — 호버/클릭 통과) */}
       {everStarted && !isReading && (
         <div className="fixed inset-0 z-30 flex items-center justify-center pointer-events-none">
@@ -566,84 +622,30 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="bg-white border-t border-gray-200 p-4 md:p-6 shadow-lg">
-        <div className="max-w-4xl mx-auto">
-          {/* Progress Bar */}
-          <div className="mb-4">
-            <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <p className="text-xs text-gray-600 mt-2 text-center">
-              {currentPage + 1} / {pages.length} pages
+      {/* 드래그 선택 → 해석 + 메모 저장 플로팅 카드 */}
+      {selectionInfo && (
+        <div
+          className="fixed z-50 -translate-x-1/2 bg-white border border-amber-300 rounded-lg shadow-2xl p-3 max-w-xs"
+          style={{ left: `${selectionInfo.x}px`, top: `${selectionInfo.y + 8}px` }}
+        >
+          {/* 해석 */}
+          <div className="mb-2">
+            <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+              {SUPPORTED_LANGUAGES[targetLanguage]} 해석
+            </span>
+            <p className="text-sm text-gray-800 mt-1">
+              {selectionTranslation
+                ? selectionTranslation
+                : <span className="text-gray-400 italic">해석 중...</span>}
             </p>
           </div>
-
-          {/* TTS Button */}
-          <div className="flex justify-center mb-4">
-            <TTSButton
-              ref={ttsRef}
-              text={pages[currentPage]}
-              onWordHighlight={(idx) => setCurrentWordIndex(idx)}
-              onHighlightedWords={(indices) => setHighlightedWords(indices)}
-              onProgress={(progress) => setTtsProgress(progress)}
-              onFinish={handleTtsFinish}
-              onPlayingChange={(playing) => {
-                setIsReading(playing);
-                if (playing) setEverStarted(true);
-              }}
-            />
-          </div>
-
-          {/* Navigation Buttons */}
-          <div className="flex items-center justify-between gap-4">
-            <button
-              onClick={handlePrevPage}
-              disabled={currentPage === 0}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              <ChevronUp size={20} />
-              <span className="text-sm font-medium">이전</span>
-            </button>
-
-            <div className="text-center text-sm text-gray-600">
-              {isAutoPlay && (
-                <span className="inline-block px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                  🔊 자동 재생 중
-                </span>
-              )}
-            </div>
-
-            <button
-              onClick={handleNextPage}
-              disabled={currentPage === pages.length - 1}
-              className="flex items-center gap-2 px-4 py-2 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            >
-              <span className="text-sm font-medium">다음</span>
-              <ChevronDown size={20} />
-            </button>
-          </div>
-
-          {/* Hints */}
-          <div className="space-y-2 text-xs text-gray-500 text-center mt-4">
-            <p>💡 위/아래로 스와이프하거나 버튼을 클릭해 페이지를 넘기세요</p>
-            <p>⏱️ 스페이스바로 TTS 재생/중지 (설정 &gt; ⏱️싱크 조정으로 타이밍 조절)</p>
-          </div>
+          <button
+            onClick={handleAddMemo}
+            className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded text-sm font-bold hover:bg-amber-600 transition"
+          >
+            <StickyNote size={15} /> 메모 저장
+          </button>
         </div>
-      </div>
-
-      {/* 드래그 선택 → 메모 추가 플로팅 버튼 */}
-      {selectionInfo && (
-        <button
-          onClick={handleAddMemo}
-          className="fixed z-50 flex items-center gap-1 px-3 py-2 bg-amber-500 text-white rounded-lg shadow-xl text-sm font-bold hover:bg-amber-600 transition -translate-x-1/2 -translate-y-full"
-          style={{ left: `${selectionInfo.x}px`, top: `${selectionInfo.y - 8}px` }}
-        >
-          <StickyNote size={16} /> 메모 저장
-        </button>
       )}
 
       {/* 메모 클립 패널 */}
