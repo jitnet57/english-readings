@@ -68,6 +68,12 @@ const langPairMap: Record<TargetLanguage, string> = {
   hi: 'en|hi',
 };
 
+// Google gtx 대상 언어 코드 (en -> target)
+const gtxLang: Record<TargetLanguage, string> = {
+  ko: 'ko', ja: 'ja', zh: 'zh-CN', es: 'es', fr: 'fr',
+  de: 'de', ru: 'ru', pt: 'pt', ar: 'ar', hi: 'hi',
+};
+
 /**
  * 긴 텍스트를 MyMemory 길이 제한(~450자)에 맞춰 문장 단위로 분할
  */
@@ -102,47 +108,68 @@ let rateLimitedUntil = 0;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// 1순위: Google 무료 gtx 엔드포인트 (한도 넉넉, CORS 지원, 키 불필요)
+async function translateViaGoogle(text: string, targetLanguage: TargetLanguage): Promise<string | null> {
+  const tl = gtxLang[targetLanguage];
+  const url =
+    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    // data[0] = [[translated, original, ...], ...]
+    if (Array.isArray(data?.[0])) {
+      const translated = data[0].map((seg: any[]) => (seg && seg[0]) || '').join('');
+      return translated || null;
+    }
+  } catch {
+    /* 실패 시 폴백 */
+  }
+  return null;
+}
+
+// 2순위: MyMemory (폴백, 이메일 한도 상향)
+async function translateViaMyMemory(text: string, targetLanguage: TargetLanguage): Promise<string | null> {
+  const langpair = langPairMap[targetLanguage];
+  const url =
+    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}` +
+    `&langpair=${langpair}&de=${encodeURIComponent(MYMEMORY_EMAIL)}`;
+  try {
+    const res = await fetch(url);
+    if (res.status === 429) {
+      rateLimitedUntil = Date.now() + 5 * 60_000; // 5분 쿨다운
+      return null;
+    }
+    if (!res.ok) return null;
+    const data = await res.json();
+    const translated = data?.responseData?.translatedText;
+    if (data?.responseStatus === 429 || (typeof translated === 'string' && /MYMEMORY WARNING|YOU USED ALL/i.test(translated))) {
+      rateLimitedUntil = Date.now() + 5 * 60_000;
+      return null;
+    }
+    return typeof translated === 'string' ? translated : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * MyMemory API로 한 조각 번역 (429 재시도 + 이메일 한도 상향)
+ * 한 조각 번역: Google gtx → MyMemory 폴백
  */
 async function translateChunk(chunk: string, targetLanguage: TargetLanguage): Promise<string> {
   const trimmed = chunk.trim();
   if (!trimmed) return chunk;
 
-  const langpair = langPairMap[targetLanguage];
-  const url =
-    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}` +
-    `&langpair=${langpair}&de=${encodeURIComponent(MYMEMORY_EMAIL)}`;
-
   const leadingSpace = chunk.match(/^\s*/)?.[0] || '';
   const trailingSpace = chunk.match(/\s*$/)?.[0] || '';
 
-  // 최대 3회: 429면 지수 백오프 후 재시도
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const response = await fetch(url);
-
-    if (response.status === 429) {
-      rateLimitedUntil = Date.now() + 60_000; // 1분간 한도 초과로 간주
-      await sleep(1000 * (attempt + 1));
-      continue;
-    }
-    if (!response.ok) throw new Error(`MyMemory API error: ${response.status}`);
-
-    const data = await response.json();
-    const translated = data?.responseData?.translatedText;
-    const status = data?.responseStatus;
-
-    // 본문에 한도 메시지가 담겨 오는 경우 처리
-    if (status === 429 || (typeof translated === 'string' && /MYMEMORY WARNING|YOU USED ALL/i.test(translated))) {
-      rateLimitedUntil = Date.now() + 60_000;
-      throw new Error('MyMemory rate limited');
-    }
-    if (!translated || typeof translated !== 'string') {
-      throw new Error('MyMemory: no translation returned');
-    }
-    return leadingSpace + translated + trailingSpace;
+  let translated = await translateViaGoogle(trimmed, targetLanguage);
+  if (!translated && Date.now() >= rateLimitedUntil) {
+    translated = await translateViaMyMemory(trimmed, targetLanguage);
   }
-  throw new Error('MyMemory rate limited (429)');
+  if (!translated) throw new Error('Translation unavailable');
+
+  return leadingSpace + translated + trailingSpace;
 }
 
 /**
@@ -160,11 +187,6 @@ export async function translateText(
     return translationCache.get(cacheKey)!;
   }
 
-  // 최근에 한도 초과했으면 잠시 호출 자체를 건너뜀 (폭주 방지)
-  if (Date.now() < rateLimitedUntil) {
-    return text;
-  }
-
   try {
     const chunks = splitIntoChunks(text);
     const translatedChunks: string[] = [];
@@ -173,7 +195,7 @@ export async function translateText(
       const translated = await translateChunk(chunk, targetLanguage);
       translatedChunks.push(translated);
       if (chunks.length > 1) {
-        await sleep(200);
+        await sleep(80);
       }
     }
 
