@@ -221,23 +221,13 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
     }
   };
 
-  // 번역 켜기: 현재 페이지를 문장별로 즉시 번역 → 이후 페이지는 백그라운드
+  // 번역 켜기: 현재 페이지만 문장별로 번역 (전체 백그라운드 번역은 하지 않음 — API 한도 보호)
   const handleTranslate = async () => {
     setTranslationOn(true);
     if (sentenceTranslations.has(currentPage)) return;
     setIsTranslating(true);
     await translatePageSentences(currentPage);
     setIsTranslating(false);
-
-    // 나머지 페이지 백그라운드 번역
-    (async () => {
-      for (let p = 0; p < pages.length; p++) {
-        if (p === currentPage) continue;
-        if (!sentenceTranslations.has(p)) {
-          await translatePageSentences(p);
-        }
-      }
-    })();
   };
 
   // 번역 모드에서 페이지 이동 시, 캐시 없으면 해당 페이지 문장 번역

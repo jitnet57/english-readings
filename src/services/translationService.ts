@@ -11,8 +11,35 @@ export interface TranslationResult {
   language: TargetLanguage;
 }
 
-// 번역 캐시 (text+lang -> 번역)
-const translationCache = new Map<string, string>();
+// 번역 캐시 (text+lang -> 번역) — localStorage에 영구 저장
+const CACHE_KEY = 'ewa:translationCache';
+const translationCache = new Map<string, string>(loadCache());
+
+// MyMemory 한도 상향용 이메일 (익명 1000단어/일 → 약 50000단어/일)
+const MYMEMORY_EMAIL = 'digitalm.2nd@gmail.com';
+
+function loadCache(): [string, string][] {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? (JSON.parse(raw) as [string, string][]) : [];
+  } catch {
+    return [];
+  }
+}
+
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+function persistCache() {
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      // 너무 커지지 않도록 최근 3000개만 보관
+      const entries = Array.from(translationCache.entries()).slice(-3000);
+      localStorage.setItem(CACHE_KEY, JSON.stringify(entries));
+    } catch {
+      /* 용량 초과 등 무시 */
+    }
+  }, 500);
+}
 
 export const SUPPORTED_LANGUAGES: Record<TargetLanguage, string> = {
   ko: '🇰🇷 한국어',
@@ -70,30 +97,52 @@ function splitIntoChunks(text: string, maxLen = 450): string[] {
   return chunks;
 }
 
+// 한도 초과(429) 상태를 잠시 기억해 폭주 방지
+let rateLimitedUntil = 0;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /**
- * MyMemory API로 한 조각 번역
+ * MyMemory API로 한 조각 번역 (429 재시도 + 이메일 한도 상향)
  */
 async function translateChunk(chunk: string, targetLanguage: TargetLanguage): Promise<string> {
   const trimmed = chunk.trim();
   if (!trimmed) return chunk;
 
   const langpair = langPairMap[targetLanguage];
-  const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}&langpair=${langpair}`;
+  const url =
+    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(trimmed)}` +
+    `&langpair=${langpair}&de=${encodeURIComponent(MYMEMORY_EMAIL)}`;
 
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`MyMemory API error: ${response.status}`);
-
-  const data = await response.json();
-  const translated = data?.responseData?.translatedText;
-
-  if (!translated || typeof translated !== 'string') {
-    throw new Error('MyMemory: no translation returned');
-  }
-
-  // 앞뒤 공백 보존
   const leadingSpace = chunk.match(/^\s*/)?.[0] || '';
   const trailingSpace = chunk.match(/\s*$/)?.[0] || '';
-  return leadingSpace + translated + trailingSpace;
+
+  // 최대 3회: 429면 지수 백오프 후 재시도
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const response = await fetch(url);
+
+    if (response.status === 429) {
+      rateLimitedUntil = Date.now() + 60_000; // 1분간 한도 초과로 간주
+      await sleep(1000 * (attempt + 1));
+      continue;
+    }
+    if (!response.ok) throw new Error(`MyMemory API error: ${response.status}`);
+
+    const data = await response.json();
+    const translated = data?.responseData?.translatedText;
+    const status = data?.responseStatus;
+
+    // 본문에 한도 메시지가 담겨 오는 경우 처리
+    if (status === 429 || (typeof translated === 'string' && /MYMEMORY WARNING|YOU USED ALL/i.test(translated))) {
+      rateLimitedUntil = Date.now() + 60_000;
+      throw new Error('MyMemory rate limited');
+    }
+    if (!translated || typeof translated !== 'string') {
+      throw new Error('MyMemory: no translation returned');
+    }
+    return leadingSpace + translated + trailingSpace;
+  }
+  throw new Error('MyMemory rate limited (429)');
 }
 
 /**
@@ -111,6 +160,11 @@ export async function translateText(
     return translationCache.get(cacheKey)!;
   }
 
+  // 최근에 한도 초과했으면 잠시 호출 자체를 건너뜀 (폭주 방지)
+  if (Date.now() < rateLimitedUntil) {
+    return text;
+  }
+
   try {
     const chunks = splitIntoChunks(text);
     const translatedChunks: string[] = [];
@@ -118,20 +172,25 @@ export async function translateText(
     for (const chunk of chunks) {
       const translated = await translateChunk(chunk, targetLanguage);
       translatedChunks.push(translated);
-      // MyMemory 레이트 제한 회피
       if (chunks.length > 1) {
-        await new Promise((r) => setTimeout(r, 150));
+        await sleep(200);
       }
     }
 
     const result = translatedChunks.join('');
     translationCache.set(cacheKey, result);
+    persistCache();
     return result;
   } catch (error) {
     console.error('Translation error:', error);
     // 실패 시 원문 반환 (엉터리 데모 번역 대신)
     return text;
   }
+}
+
+// 현재 한도 초과 상태인지 (UI 안내용)
+export function isRateLimited(): boolean {
+  return Date.now() < rateLimitedUntil;
 }
 
 export async function translateSentence(
