@@ -132,14 +132,45 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
     });
   }, [bookId, currentPage, title, author, pages.length]);
 
-  // 드래그 선택 → 메모 추가 버튼 + 해석 표시
+  // 선택 범위를 단어 경계로 확장 (단어 일부만 드래그해도 전체 단어/숙어 선택)
+  const snapRangeToWords = (range: Range) => {
+    const isWordChar = (c: string) => !!c && /[\w'’\-]/.test(c);
+    const sc = range.startContainer;
+    if (sc.nodeType === Node.TEXT_NODE) {
+      const t = sc.textContent || '';
+      let s = range.startOffset;
+      while (s > 0 && isWordChar(t[s - 1])) s--;
+      range.setStart(sc, s);
+    }
+    const ec = range.endContainer;
+    if (ec.nodeType === Node.TEXT_NODE) {
+      const t = ec.textContent || '';
+      let e = range.endOffset;
+      while (e < t.length && isWordChar(t[e])) e++;
+      range.setEnd(ec, e);
+    }
+  };
+
+  // 드래그 선택 → 단어 경계 스냅 + 메모 버튼 + 해석 표시
   const handleTextSelection = () => {
     const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+      // 선택을 전체 단어 단위로 확장
+      try {
+        const range = sel.getRangeAt(0);
+        snapRangeToWords(range);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      } catch {
+        /* 일부 브라우저 예외 무시 */
+      }
+    }
+
     const text = sel?.toString().trim() || '';
     if (text.length > 0 && sel && sel.rangeCount > 0) {
       const rect = sel.getRangeAt(0).getBoundingClientRect();
       setSelectionInfo({ text, x: rect.left + rect.width / 2, y: rect.bottom });
-      // 선택한 문장 해석 (비동기)
+      // 선택한 단어/숙어 해석 (비동기)
       setSelectionTranslation('');
       translateText(text, targetLanguage, 'mymemory')
         .then((t) => setSelectionTranslation(t))
