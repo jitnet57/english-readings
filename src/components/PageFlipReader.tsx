@@ -371,8 +371,8 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
         </div>
       )}
 
-      {/* 상단 컨트롤 (들으기 + 이전/다음 + 진행도, 항상 노출) */}
-      <div className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
+      {/* 상단 컨트롤 (들으기 + 번역 + 이전/다음 + 진행도, 항상 노출/고정) */}
+      <div className="sticky top-0 z-20 bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
         <div className="max-w-4xl mx-auto flex flex-col gap-2">
           {/* 진행 바 */}
           <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -414,9 +414,28 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
               <ChevronDown size={18} />
             </button>
           </div>
-          <p className="text-xs text-gray-500 text-center">
-            {currentPage + 1} / {pages.length} pages · 스페이스바/화면 탭으로 재생·정지
-          </p>
+          {/* 문장별 번역 토글 + 페이지 정보 */}
+          <div className="flex items-center justify-center gap-3 flex-wrap">
+            {!translationOn ? (
+              <button
+                onClick={handleTranslate}
+                disabled={isTranslating}
+                className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition"
+              >
+                {isTranslating ? '번역 중...' : `📖 ${SUPPORTED_LANGUAGES[targetLanguage]} 문장별 번역`}
+              </button>
+            ) : (
+              <button
+                onClick={() => setTranslationOn(false)}
+                className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
+              >
+                번역 숨기기
+              </button>
+            )}
+            <span className="text-xs text-gray-500">
+              {currentPage + 1} / {pages.length} pages
+            </span>
+          </div>
         </div>
       </div>
 
@@ -429,9 +448,9 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
         </div>
       )}
 
-      {/* Main Content - Book Page */}
+      {/* Main Content - Book Page (단일 페이지 스크롤) */}
       <div
-        className="flex-1 flex items-center justify-center p-4 md:p-8 overflow-hidden cursor-pointer select-none"
+        className="flex-1 flex items-start justify-center p-4 md:p-8 select-none"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
@@ -441,37 +460,14 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
           <div className="absolute -left-2 top-0 w-1 h-full bg-gradient-to-r from-black/20 to-transparent rounded-l-lg" />
 
           {/* Page Content */}
-          <div className="bg-yellow-50 shadow-2xl rounded-r-lg p-8 md:p-12 min-h-96 flex flex-col justify-center book-page">
-            {/* Translation Controls */}
-            <div className="mb-4 flex gap-2 items-center" onClick={(e) => e.stopPropagation()}>
-              {!translationOn ? (
-                <button
-                  onClick={handleTranslate}
-                  disabled={isTranslating}
-                  className="px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 disabled:bg-gray-400 transition"
-                >
-                  {isTranslating ? '번역 중...' : `📖 ${SUPPORTED_LANGUAGES[targetLanguage]} 문장별 번역`}
-                </button>
-              ) : (
-                <button
-                  onClick={() => setTranslationOn(false)}
-                  className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition"
-                >
-                  번역 숨기기
-                </button>
-              )}
-              {isTranslating && (
-                <span className="text-xs text-blue-600 animate-pulse">문장 번역 중...</span>
-              )}
-            </div>
-
-            {/* Page Text with Highlighting — 본문 터치/클릭으로 재생·정지 */}
+          <div className="bg-yellow-50 shadow-2xl rounded-r-lg p-8 md:p-12 min-h-96 flex flex-col book-page">
+            {/* Page Text with Highlighting — 본문 터치/클릭으로 재생·정지 (단일 스크롤) */}
             <div
               ref={textContainerRef}
               onClick={handleScreenTap}
               onMouseUp={handleTextSelection}
               onTouchEnd={handleTextSelection}
-              className="flex-1 relative max-h-[55vh] overflow-y-auto pr-2 cursor-pointer select-text"
+              className="flex-1 relative pr-1 cursor-pointer select-text"
             >
               {/* 문장마다: 원문(형광색+펜슬) 첫째 줄, 번역 둘째 줄 */}
               {(() => {
