@@ -20,6 +20,7 @@ export interface Memo {
   bookTitle: string;
   page: number;
   text: string;
+  translation?: string; // 선택 텍스트의 해석
   note: string;
   createdAt: number;
 }

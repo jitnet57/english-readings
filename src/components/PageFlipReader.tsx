@@ -124,6 +124,7 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
   const [showMemos, setShowMemos] = useState(false);
   const [selectionInfo, setSelectionInfo] = useState<{ text: string; x: number; y: number } | null>(null);
   const [selectionTranslation, setSelectionTranslation] = useState<string>('');
+  const [memoNote, setMemoNote] = useState<string>('');
 
   // 진행 위치 + 이어읽기 정보 저장 (페이지 이동 시)
   useEffect(() => {
@@ -185,13 +186,15 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
 
   const handleAddMemo = () => {
     if (!selectionInfo) return;
-    const note = window.prompt(`메모 (선택: "${selectionInfo.text.slice(0, 40)}...")`, '') ?? '';
     addMemo({
       bookId, bookTitle: title, page: currentPage,
-      text: selectionInfo.text, note,
+      text: selectionInfo.text,
+      translation: selectionTranslation,
+      note: memoNote.trim(),
     });
     setMemos(getMemosForBook(bookId));
     setSelectionInfo(null);
+    setMemoNote('');
     window.getSelection()?.removeAllRanges();
   };
 
@@ -675,29 +678,49 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
         </div>
       </div>
 
-      {/* 드래그 선택 → 해석 + 메모 저장 플로팅 카드 */}
+      {/* 드래그 선택 → 해석 + 메모 입력 + 저장 플로팅 카드 */}
       {selectionInfo && (
         <div
-          className="fixed z-50 -translate-x-1/2 bg-white border border-amber-300 rounded-lg shadow-2xl p-3 max-w-xs"
+          className="fixed z-50 -translate-x-1/2 bg-white border border-amber-300 rounded-lg shadow-2xl p-3 w-72"
           style={{ left: `${selectionInfo.x}px`, top: `${selectionInfo.y + 8}px` }}
+          onClick={(e) => e.stopPropagation()}
         >
+          {/* 선택한 원문 */}
+          <p className="text-sm font-medium text-gray-800 line-clamp-2">"{selectionInfo.text}"</p>
           {/* 해석 */}
-          <div className="mb-2">
+          <div className="mt-1 mb-2">
             <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
               {SUPPORTED_LANGUAGES[targetLanguage]} 해석
             </span>
-            <p className="text-sm text-gray-800 mt-1">
+            <p className="text-sm text-blue-700 mt-1">
               {selectionTranslation
                 ? selectionTranslation
                 : <span className="text-gray-400 italic">해석 중...</span>}
             </p>
           </div>
-          <button
-            onClick={handleAddMemo}
-            className="w-full flex items-center justify-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded text-sm font-bold hover:bg-amber-600 transition"
-          >
-            <StickyNote size={15} /> 메모 저장
-          </button>
+          {/* 선택 메모 입력 */}
+          <input
+            type="text"
+            value={memoNote}
+            onChange={(e) => setMemoNote(e.target.value)}
+            placeholder="메모 추가 (선택)"
+            className="w-full px-2 py-1 mb-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-amber-400"
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddMemo(); }}
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleAddMemo}
+              className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-amber-500 text-white rounded text-sm font-bold hover:bg-amber-600 transition"
+            >
+              <StickyNote size={15} /> 저장
+            </button>
+            <button
+              onClick={() => { setSelectionInfo(null); setMemoNote(''); window.getSelection()?.removeAllRanges(); }}
+              className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded text-sm hover:bg-gray-200 transition"
+            >
+              취소
+            </button>
+          </div>
         </div>
       )}
 
@@ -730,7 +753,8 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
                     </button>
                   </div>
                   <p className="text-sm text-gray-800 mt-2 italic">"{memo.text}"</p>
-                  {memo.note && <p className="text-xs text-blue-700 mt-2 border-t pt-2">📝 {memo.note}</p>}
+                  {memo.translation && <p className="text-sm text-blue-700 mt-1">{memo.translation}</p>}
+                  {memo.note && <p className="text-xs text-gray-700 mt-2 border-t pt-2">📝 {memo.note}</p>}
                 </div>
               ))
             )}
