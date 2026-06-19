@@ -1,18 +1,31 @@
-import { useState } from 'react';
+import { useState, lazy, Suspense } from 'react';
 import { BookReader } from '@/components/BookReader';
 import { BookSearch } from '@/components/BookSearch';
 import { GutenbergSearcher } from '@/components/GutenbergSearcher';
 import { RecommendedBooks } from '@/components/RecommendedBooks';
-import { Search, BookOpen } from 'lucide-react';
+import { Search, BookOpen, Upload } from 'lucide-react';
 import { Book } from '@/types/book';
 import { getLastRead, coverUrl } from '@/services/readingStore';
+
+const FileImporter = lazy(() =>
+  import('@/components/FileImporter').then((m) => ({ default: m.FileImporter }))
+);
 
 function App() {
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showGutenberg, setShowGutenberg] = useState(false);
+  const [showImporter, setShowImporter] = useState(false);
   const [selectedBookIndex, setSelectedBookIndex] = useState<any>(null);
   const lastRead = getLastRead();
+
+  if (showImporter) {
+    return (
+      <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500">불러오는 중...</div>}>
+        <FileImporter onBack={() => setShowImporter(false)} />
+      </Suspense>
+    );
+  }
 
   if (selectedBook) {
     return <BookReader book={selectedBook} onBack={() => setSelectedBook(null)} />;
@@ -55,6 +68,13 @@ function App() {
             >
               <BookOpen size={20} />
               전자도서관
+            </button>
+            <button
+              onClick={() => setShowImporter(true)}
+              className="flex items-center gap-2 px-6 py-3 bg-emerald-400 text-emerald-900 rounded-lg hover:bg-emerald-300 transition font-bold shadow-lg"
+            >
+              <Upload size={20} />
+              내 파일 읽기
             </button>
             <button
               onClick={() => setShowSearch(true)}

@@ -128,6 +128,52 @@ async function translateViaGoogle(text: string, targetLanguage: TargetLanguage):
   return null;
 }
 
+// 임의 언어쌍 gtx 번역 (파일 가져오기용: ko→en 등). sl='auto' 지원
+async function gtxTranslate(text: string, sl: string, tl: string): Promise<string | null> {
+  const url =
+    `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sl}&tl=${tl}&dt=t&q=${encodeURIComponent(text)}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (Array.isArray(data?.[0])) {
+      return data[0].map((seg: any[]) => (seg && seg[0]) || '').join('') || null;
+    }
+  } catch {
+    /* 무시 */
+  }
+  return null;
+}
+
+/**
+ * 문서 텍스트를 임의 언어로 번역 (업로드 파일용). sourceLang 기본 'auto'
+ * 캐시 사용 + 길이 제한에 맞춰 분할
+ */
+export async function translateDocument(
+  text: string,
+  targetLang: string,
+  sourceLang: string = 'auto'
+): Promise<string> {
+  if (!text || !text.trim()) return text;
+  const cacheKey = `${sourceLang}>${targetLang}|${text}`;
+  if (translationCache.has(cacheKey)) return translationCache.get(cacheKey)!;
+
+  const chunks = splitIntoChunks(text, 1500);
+  const out: string[] = [];
+  for (const chunk of chunks) {
+    if (!chunk.trim()) { out.push(chunk); continue; }
+    const lead = chunk.match(/^\s*/)?.[0] || '';
+    const trail = chunk.match(/\s*$/)?.[0] || '';
+    const t = await gtxTranslate(chunk.trim(), sourceLang, targetLang);
+    out.push(t ? lead + t + trail : chunk);
+    await sleep(60);
+  }
+  const result = out.join('');
+  translationCache.set(cacheKey, result);
+  persistCache();
+  return result;
+}
+
 // 2순위: MyMemory (폴백, 이메일 한도 상향)
 async function translateViaMyMemory(text: string, targetLanguage: TargetLanguage): Promise<string | null> {
   const langpair = langPairMap[targetLanguage];
