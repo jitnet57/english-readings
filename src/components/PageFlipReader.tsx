@@ -58,6 +58,8 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
   const [highlightedWords, setHighlightedWords] = useState<Set<number>>(new Set());
   const [currentWordIndex, setCurrentWordIndex] = useState(-1);
   const [hoveredWord, setHoveredWord] = useState<{ word: string; x: number; y: number } | null>(null);
+  const [hoverTranslation, setHoverTranslation] = useState<string>('');
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [ttsProgress, setTtsProgress] = useState(0);
   const [showDiscussion, setShowDiscussion] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState<TargetLanguage>('ko');
@@ -523,15 +525,29 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
                     <span
                       key={idx}
                       ref={isCurrent ? currentWordRef : undefined}
-                      className={`relative transition-colors duration-200 ${bg} ${underline} ${pencilUnderline} ${isImportant ? 'cursor-help font-medium' : ''} ${isCurrent ? 'font-bold' : ''}`}
-                      title={isImportant ? `📖 ${vocabInfo?.meaning}` : ''}
+                      className={`relative transition-colors duration-200 ${bg} ${underline} ${pencilUnderline} ${!isSpace ? 'cursor-help' : ''} ${isImportant ? 'font-medium' : ''} ${isCurrent ? 'font-bold' : ''}`}
                       onMouseEnter={(e) => {
-                        if (vocabInfo) {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setHoveredWord({ word: cleanWord, x: rect.left, y: rect.top });
+                        if (isSpace || !cleanWord) return;
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setHoveredWord({ word: cleanWord, x: rect.left + rect.width / 2, y: rect.top });
+                        // 호버 단어 해석 (디바운스 + 캐시)
+                        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+                        if (getVocabularyInfo(cleanWord)) {
+                          setHoverTranslation('');
+                        } else {
+                          setHoverTranslation('');
+                          hoverTimerRef.current = setTimeout(() => {
+                            translateText(cleanWord, targetLanguage, 'mymemory')
+                              .then((t) => setHoverTranslation(t))
+                              .catch(() => setHoverTranslation(''));
+                          }, 200);
                         }
                       }}
-                      onMouseLeave={() => setHoveredWord(null)}
+                      onMouseLeave={() => {
+                        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+                        setHoveredWord(null);
+                        setHoverTranslation('');
+                      }}
                     >
                       {isCurrent && (
                         // 🔺 빨간 삼각형 포인터 — 문장(단어)을 위로 가리킴
@@ -572,14 +588,34 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
                 });
               })()}
 
-              {/* Tooltip */}
-              {hoveredWord && getVocabularyInfo(hoveredWord.word) && (
+              {/* 일반 단어 호버 툴팁 — 해석 표시 */}
+              {hoveredWord && !getVocabularyInfo(hoveredWord.word) && (
                 <div
-                  className="fixed bg-white border-2 border-yellow-400 rounded-lg shadow-xl p-4 z-50 max-w-xs"
+                  className="fixed bg-gray-900 text-white rounded-lg shadow-xl px-3 py-2 z-50 max-w-xs pointer-events-none"
                   style={{
                     left: `${hoveredWord.x}px`,
                     top: `${hoveredWord.y - 10}px`,
-                    transform: 'translateY(-100%)',
+                    transform: 'translate(-50%, -100%)',
+                  }}
+                >
+                  <span className="font-bold">{hoveredWord.word}</span>
+                  <span className="mx-1 opacity-50">→</span>
+                  <span>
+                    {hoverTranslation
+                      ? hoverTranslation
+                      : <span className="opacity-60 italic">해석 중...</span>}
+                  </span>
+                </div>
+              )}
+
+              {/* 중요 단어 호버 툴팁 — 레벨/시험/정의 */}
+              {hoveredWord && getVocabularyInfo(hoveredWord.word) && (
+                <div
+                  className="fixed bg-white border-2 border-yellow-400 rounded-lg shadow-xl p-4 z-50 max-w-xs pointer-events-none"
+                  style={{
+                    left: `${hoveredWord.x}px`,
+                    top: `${hoveredWord.y - 10}px`,
+                    transform: 'translate(-50%, -100%)',
                   }}
                 >
                   {(() => {
