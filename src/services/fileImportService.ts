@@ -40,6 +40,46 @@ async function parsePdf(file: File): Promise<string> {
   return parts.join('\n\n');
 }
 
+// HWP 5.0 바이너리 (.hwp) — hwp.js로 파싱 (동적 import)
+async function parseHwp(file: File): Promise<string> {
+  const { parse } = await import('hwp.js');
+  const buf = new Uint8Array(await file.arrayBuffer());
+  const doc = parse(buf as any, { type: 'array' });
+  const lines: string[] = [];
+  for (const section of doc.sections) {
+    for (const para of section.content) {
+      let line = '';
+      for (const ch of para.content) {
+        const v: any = (ch as any).value;
+        if (typeof v === 'string') line += v;
+        else if (typeof v === 'number' && v >= 32) line += String.fromCharCode(v);
+      }
+      lines.push(line);
+    }
+  }
+  return lines.join('\n').trim();
+}
+
+// HWPX (.hwpx) — XML zip 압축 해제 후 텍스트 추출 (동적 import)
+async function parseHwpx(file: File): Promise<string> {
+  const JSZip = (await import('jszip')).default;
+  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  const sectionNames = Object.keys(zip.files)
+    .filter((n) => /Contents\/section\d+\.xml$/i.test(n))
+    .sort();
+  const parts: string[] = [];
+  for (const name of sectionNames) {
+    const xml = await zip.files[name].async('text');
+    const dom = new DOMParser().parseFromString(xml, 'application/xml');
+    const paras = Array.from(dom.getElementsByTagName('*')).filter((e) => e.localName === 'p');
+    for (const p of paras) {
+      const runs = Array.from(p.getElementsByTagName('*')).filter((e) => e.localName === 't');
+      parts.push(runs.map((t) => t.textContent || '').join(''));
+    }
+  }
+  return parts.join('\n').trim();
+}
+
 /**
  * 파일에서 텍스트 추출
  */
@@ -57,11 +97,21 @@ export async function importFile(file: File): Promise<ImportResult> {
   if (lower.endsWith('.pdf')) {
     return { title, text: await parsePdf(file) };
   }
-  if (lower.endsWith('.hwp') || lower.endsWith('.hwpx')) {
-    // HWP는 독점 바이너리 포맷이라 브라우저에서 안정적 추출이 어려움
-    throw new Error(
-      'HWP 파일은 직접 지원이 어렵습니다. 한글에서 "다른 이름으로 저장 → PDF 또는 TXT"로 변환 후 올려주세요.'
-    );
+  if (lower.endsWith('.hwpx')) {
+    const text = await parseHwpx(file);
+    if (!text) throw new Error('HWPX에서 텍스트를 추출하지 못했습니다.');
+    return { title, text };
+  }
+  if (lower.endsWith('.hwp')) {
+    try {
+      const text = await parseHwp(file);
+      if (!text) throw new Error('빈 문서');
+      return { title, text };
+    } catch (e) {
+      throw new Error(
+        'HWP 파싱에 실패했습니다. 한글에서 "다른 이름으로 저장 → PDF/TXT/HWPX"로 변환 후 올려주세요.'
+      );
+    }
   }
   // 알 수 없는 확장자는 텍스트로 시도
   return { title, text: await file.text() };

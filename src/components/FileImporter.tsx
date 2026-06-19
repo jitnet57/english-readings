@@ -91,7 +91,7 @@ export function FileImporter({ onBack }: FileImporterProps) {
           <button onClick={onBack} className="text-2xl hover:opacity-80">←</button>
           <div>
             <h1 className="text-3xl font-bold">📂 내 파일 읽기</h1>
-            <p className="text-sm opacity-90">txt · md · pdf 파일을 번역해서 읽어요</p>
+            <p className="text-sm opacity-90">txt · md · pdf · hwp 파일을 번역해서 읽어요</p>
           </div>
         </div>
       </div>
@@ -136,7 +136,7 @@ export function FileImporter({ onBack }: FileImporterProps) {
               <label className="block border-2 border-dashed border-emerald-300 rounded-xl p-12 text-center cursor-pointer hover:bg-emerald-50 transition">
                 <Upload className="text-emerald-500 mx-auto mb-3" size={40} />
                 <p className="font-bold text-gray-800 mb-1">파일을 선택하세요</p>
-                <p className="text-sm text-gray-500">txt, md, pdf 지원 (hwp는 PDF로 변환 후)</p>
+                <p className="text-sm text-gray-500">txt · md · pdf · hwp · hwpx 지원</p>
                 <input
                   type="file"
                   accept=".txt,.md,.markdown,.pdf,.hwp,.hwpx"
