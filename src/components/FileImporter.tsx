@@ -79,6 +79,7 @@ export function FileImporter({ onBack }: FileImporterProps) {
         title={title}
         author="내 파일"
         pages={pages}
+        lang={readLang}
         onBack={onBack}
       />
     );

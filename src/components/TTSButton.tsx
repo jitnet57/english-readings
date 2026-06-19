@@ -3,6 +3,7 @@ import { Volume2, Pause, Settings } from 'lucide-react';
 
 interface TTSButtonProps {
   text: string;
+  lang?: string; // 읽는 언어 코드 (en, ko, ja, zh-CN, es, fr ...)
   onWordHighlight?: (wordIndex: number) => void;
   onHighlightedWords?: (indices: Set<number>) => void;
   onProgress?: (progress: number) => void;
@@ -10,13 +11,21 @@ interface TTSButtonProps {
   onPlayingChange?: (playing: boolean) => void; // 재생/정지 상태 변화
 }
 
+// 언어코드 → BCP-47(utterance.lang) 매핑
+const BCP47: Record<string, string> = {
+  en: 'en-US', ko: 'ko-KR', ja: 'ja-JP', 'zh-CN': 'zh-CN', zh: 'zh-CN',
+  es: 'es-ES', fr: 'fr-FR', de: 'de-DE', ru: 'ru-RU', pt: 'pt-PT', ar: 'ar-SA', hi: 'hi-IN',
+};
+// 언어코드 → voice.lang 접두사 (음성 매칭용)
+const langPrefix = (code: string) => (code || 'en').split('-')[0].toLowerCase();
+
 export interface TTSHandle {
   toggle: () => void;
   play: () => void;
 }
 
 export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButton(
-  { text, onWordHighlight, onHighlightedWords, onProgress, onFinish, onPlayingChange },
+  { text, lang = 'en', onWordHighlight, onHighlightedWords, onProgress, onFinish, onPlayingChange },
   ref
 ) {
   const [isPlaying, setIsPlaying] = useState(false);
@@ -52,34 +61,31 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
 
   useEffect(() => {
     const updateVoices = () => {
-      const availableVoices = window.speechSynthesis.getVoices();
-      setVoices(availableVoices);
-
-      // Samantha 음성 찾기 (macOS) 또는 기본 영어 음성
-      let samanthaIndex = availableVoices.findIndex(v =>
-        v.name.includes('Samantha') || v.name.includes('samantha')
-      );
-
-      if (samanthaIndex === -1) {
-        // Samantha가 없으면 Google US English 찾기
-        samanthaIndex = availableVoices.findIndex(v =>
-          v.name.includes('Google US English') || v.name.includes('Google') && v.lang.includes('en-US')
-        );
-      }
-
-      if (samanthaIndex === -1) {
-        // 그래도 없으면 첫 번째 영어 음성
-        samanthaIndex = availableVoices.findIndex(v => v.lang.startsWith('en'));
-      }
-
-      if (samanthaIndex !== -1) {
-        setSelectedVoiceIndex(samanthaIndex);
-      }
+      setVoices(window.speechSynthesis.getVoices());
     };
-
     updateVoices();
     window.speechSynthesis.onvoiceschanged = updateVoices;
   }, []);
+
+  // 읽는 언어에 맞춰 기본 나레이터 자동 선택 (언어/음성목록 변경 시)
+  useEffect(() => {
+    if (voices.length === 0) return;
+    const prefix = langPrefix(lang);
+    const matching = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix));
+
+    let idx = -1;
+    if (prefix === 'en') {
+      // 영어는 Samantha → Google US → 첫 영어 순
+      idx = voices.findIndex((v) => /samantha/i.test(v.name));
+      if (idx === -1) idx = voices.findIndex((v) => /google us english/i.test(v.name));
+      if (idx === -1 && matching[0]) idx = voices.indexOf(matching[0]);
+    } else if (matching.length > 0) {
+      // 그 외 언어: Google/Microsoft 우선, 없으면 첫 매칭 음성
+      const preferred = matching.find((v) => /google|microsoft|siri|yuna|kyoko|ting/i.test(v.name));
+      idx = voices.indexOf(preferred || matching[0]);
+    }
+    if (idx !== -1) setSelectedVoiceIndex(idx);
+  }, [voices, lang]);
 
   // 싱크 오프셋 저장
   useEffect(() => {
@@ -106,7 +112,7 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isPlaying, voices, selectedVoiceIndex, rate, pitch, text]);
+  }, [isPlaying, voices, selectedVoiceIndex, rate, pitch, text, lang]);
 
   const handleTTS = () => {
     const synth = window.speechSynthesis;
@@ -135,7 +141,7 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
 
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.voice = voices[selectedVoiceIndex];
-    utterance.lang = 'en-US';
+    utterance.lang = voices[selectedVoiceIndex]?.lang || BCP47[lang] || 'en-US';
     utterance.rate = rate;
     utterance.pitch = pitch;
 
@@ -318,20 +324,37 @@ export const TTSButton = forwardRef<TTSHandle, TTSButtonProps>(function TTSButto
         >
           <h3 className="font-bold text-gray-800 mb-4 text-lg">⚙️ TTS 설정</h3>
 
-          {/* Voice Selection */}
+          {/* Voice Selection — 현재 언어 나레이터 우선 표시 */}
           <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">음성 선택</label>
-            <select
-              value={selectedVoiceIndex}
-              onChange={(e) => setSelectedVoiceIndex(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            >
-              {voices.map((voice, idx) => (
-                <option key={idx} value={idx}>
-                  {voice.name} ({voice.lang})
-                </option>
-              ))}
-            </select>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              나레이터 선택 <span className="text-xs text-gray-400">({BCP47[lang] || lang})</span>
+            </label>
+            {(() => {
+              const prefix = langPrefix(lang);
+              const matching = voices.filter((v) => v.lang.toLowerCase().startsWith(prefix));
+              const list = matching.length > 0 ? matching : voices;
+              return (
+                <select
+                  value={selectedVoiceIndex}
+                  onChange={(e) => setSelectedVoiceIndex(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  {list.map((voice) => {
+                    const realIdx = voices.indexOf(voice);
+                    return (
+                      <option key={realIdx} value={realIdx}>
+                        {voice.name} ({voice.lang})
+                      </option>
+                    );
+                  })}
+                </select>
+              );
+            })()}
+            {voices.filter((v) => v.lang.toLowerCase().startsWith(langPrefix(lang))).length === 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                ⚠️ 이 기기에 해당 언어({BCP47[lang] || lang}) 음성이 없습니다. 기본 음성으로 재생됩니다.
+              </p>
+            )}
           </div>
 
           {/* Speed Control */}

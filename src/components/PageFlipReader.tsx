@@ -14,6 +14,7 @@ interface PageFlipReaderProps {
   title: string;
   author: string;
   pages: string[];
+  lang?: string; // 읽는(낭독) 언어 코드. 기본 영어
   onBack: () => void;
 }
 
@@ -47,7 +48,7 @@ function splitPageIntoSentences(pageText: string): SentenceGroup[] {
   return groups;
 }
 
-export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFlipReaderProps) {
+export function PageFlipReader({ bookId, title, author, pages, lang = 'en', onBack }: PageFlipReaderProps) {
   // 이어 읽기: 저장된 진행 위치에서 시작 (범위 보정)
   const [currentPage, setCurrentPage] = useState(() => {
     const saved = getProgress(bookId);
@@ -421,6 +422,7 @@ export function PageFlipReader({ bookId, title, author, pages, onBack }: PageFli
             <TTSButton
               ref={ttsRef}
               text={pages[currentPage]}
+              lang={lang}
               onWordHighlight={(idx) => setCurrentWordIndex(idx)}
               onHighlightedWords={(indices) => setHighlightedWords(indices)}
               onProgress={(p) => setTtsProgress(p)}
