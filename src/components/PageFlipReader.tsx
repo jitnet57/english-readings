@@ -3,7 +3,7 @@ import { ChevronUp, ChevronDown, Globe, StickyNote, Trash2, X } from 'lucide-rea
 import { TTSButton, type TTSHandle } from './TTSButton';
 import { BookDiscussion } from './BookDiscussion';
 import { getVocabularyInfo, levelColors, examColors, getLevelLabel } from '@/data/vocabularyData';
-import { SUPPORTED_LANGUAGES, translateText, type TargetLanguage } from '@/services/translationService';
+import { SUPPORTED_LANGUAGES, translateDocument, gtxTargetCode, type TargetLanguage } from '@/services/translationService';
 import {
   saveProgress, getProgress, saveLastRead,
   addMemo, deleteMemo, getMemosForBook, type Memo,
@@ -63,7 +63,8 @@ export function PageFlipReader({ bookId, title, author, pages, lang = 'en', onBa
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [ttsProgress, setTtsProgress] = useState(0);
   const [showDiscussion, setShowDiscussion] = useState(false);
-  const [targetLanguage, setTargetLanguage] = useState<TargetLanguage>('ko');
+  // 읽는 언어가 영어면 한국어로, 아니면 영어로 번역을 기본값으로
+  const [targetLanguage, setTargetLanguage] = useState<TargetLanguage>(lang === 'en' ? 'ko' : 'en');
   const [isTranslating, setIsTranslating] = useState(false);
   const [showLanguageSelector, setShowLanguageSelector] = useState(false);
   const [translationOn, setTranslationOn] = useState(false);
@@ -174,9 +175,9 @@ export function PageFlipReader({ bookId, title, author, pages, lang = 'en', onBa
     if (text.length > 0 && sel && sel.rangeCount > 0) {
       const rect = sel.getRangeAt(0).getBoundingClientRect();
       setSelectionInfo({ text, x: rect.left + rect.width / 2, y: rect.bottom });
-      // 선택한 단어/숙어 해석 (비동기)
+      // 선택한 단어/숙어 해석 (읽는 언어 → 대상 언어)
       setSelectionTranslation('');
-      translateText(text, targetLanguage, 'mymemory')
+      translateDocument(text, gtxTargetCode(targetLanguage), lang)
         .then((t) => setSelectionTranslation(t))
         .catch(() => setSelectionTranslation(''));
     } else {
@@ -245,7 +246,7 @@ export function PageFlipReader({ bookId, title, author, pages, lang = 'en', onBa
     const result: string[] = new Array(groups.length).fill('');
     for (let i = 0; i < groups.length; i++) {
       try {
-        result[i] = await translateText(groups[i].text, targetLanguage, 'mymemory');
+        result[i] = await translateDocument(groups[i].text, gtxTargetCode(targetLanguage), lang);
       } catch {
         result[i] = '';
       }
@@ -542,7 +543,7 @@ export function PageFlipReader({ bookId, title, author, pages, lang = 'en', onBa
                         } else {
                           setHoverTranslation('');
                           hoverTimerRef.current = setTimeout(() => {
-                            translateText(cleanWord, targetLanguage, 'mymemory')
+                            translateDocument(cleanWord, gtxTargetCode(targetLanguage), lang)
                               .then((t) => setHoverTranslation(t))
                               .catch(() => setHoverTranslation(''));
                           }, 200);

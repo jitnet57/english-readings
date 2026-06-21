@@ -2,7 +2,7 @@
  * 실제 번역 서비스 — MyMemory API 사용 (무료, CORS 지원, API 키 불필요)
  */
 
-export type TargetLanguage = 'ko' | 'ja' | 'zh' | 'es' | 'fr' | 'de' | 'ru' | 'pt' | 'ar' | 'hi';
+export type TargetLanguage = 'en' | 'ko' | 'ja' | 'zh' | 'es' | 'fr' | 'de' | 'ru' | 'pt' | 'ar' | 'hi';
 export type TranslationAPI = 'mymemory' | 'demo';
 
 export interface TranslationResult {
@@ -42,6 +42,7 @@ function persistCache() {
 }
 
 export const SUPPORTED_LANGUAGES: Record<TargetLanguage, string> = {
+  en: '🇬🇧 English',
   ko: '🇰🇷 한국어',
   ja: '🇯🇵 日本語',
   zh: '🇨🇳 中文',
@@ -56,6 +57,7 @@ export const SUPPORTED_LANGUAGES: Record<TargetLanguage, string> = {
 
 // MyMemory langpair 코드 (en -> target)
 const langPairMap: Record<TargetLanguage, string> = {
+  en: 'ko|en',
   ko: 'en|ko',
   ja: 'en|ja',
   zh: 'en|zh-CN',
@@ -70,9 +72,14 @@ const langPairMap: Record<TargetLanguage, string> = {
 
 // Google gtx 대상 언어 코드 (en -> target)
 const gtxLang: Record<TargetLanguage, string> = {
-  ko: 'ko', ja: 'ja', zh: 'zh-CN', es: 'es', fr: 'fr',
+  en: 'en', ko: 'ko', ja: 'ja', zh: 'zh-CN', es: 'es', fr: 'fr',
   de: 'de', ru: 'ru', pt: 'pt', ar: 'ar', hi: 'hi',
 };
+
+// 대상 언어를 gtx 코드로 (리더의 임의 소스→타깃 번역용)
+export function gtxTargetCode(t: TargetLanguage): string {
+  return gtxLang[t] || 'en';
+}
 
 /**
  * 긴 텍스트를 MyMemory 길이 제한(~450자)에 맞춰 문장 단위로 분할
