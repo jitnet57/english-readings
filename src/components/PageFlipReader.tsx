@@ -268,14 +268,14 @@ export function PageFlipReader({ bookId, title, author, pages, lang = 'en', onBa
     setIsTranslating(false);
   };
 
-  // 번역 모드에서 페이지 이동 시, 캐시 없으면 해당 페이지 문장 번역
+  // 번역 모드에서 페이지 이동/언어 변경 시, 캐시 없으면 해당 페이지 문장 번역
   useEffect(() => {
     if (translationOn && !sentenceTranslations.has(currentPage)) {
       setIsTranslating(true);
       translatePageSentences(currentPage).finally(() => setIsTranslating(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, translationOn]);
+  }, [currentPage, translationOn, targetLanguage]);
 
   const handleNextPage = () => {
     if (currentPage < pages.length - 1) {
